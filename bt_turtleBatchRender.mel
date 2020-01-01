@@ -1,0 +1,120 @@
+
+// Author:		Cory Mogk
+// Updated by:	Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+//
+//  Procedure Name:
+//      performbt_turtleBatchRender
+//
+//  Description:
+// 
+//  Input Arguments:
+//        $option : Whether to set the options to default values.
+//  Return Value:
+//        None
+//
+
+
+global proc bt_turtleBatchRenderOptions(){
+
+	if (`pluginInfo -q -l "Turtle"` == 0)
+    	catch(`loadPlugin "C:/Program Files/Autodesk/Maya2015/bin/plug-ins/Turtle.mll"`);
+    	   
+    confirmDialog 
+        -title "Turtle Batch Render"
+        -message "Use the global Render Settings UI for both common and Turtle specific options"
+        -button "OK" -button "Cancel"
+        -defaultButton "OK";
+
+    unifiedRenderGlobalsWindow;
+  
+}
+
+global proc bt_turtleBatchRender(){
+
+    string $file;
+    string $fileTokens[];
+
+    string $result = `confirmDialog 
+        -title "Turtle Batch Render"
+        -message "This will freeze the Maya UI until the render is complete.  Do you want to continue?"
+        -button "OK" -button "Cancel"
+        -defaultButton "OK"`;
+        
+    if ($result == "Cancel")
+        error  "Turtle batch render cancelled.";
+        
+        	
+	if (`pluginInfo -q -l "Turtle"` == 0)
+    	catch(`loadPlugin "C:/Program Files/Autodesk/Maya2015/bin/plug-ins/Turtle.mll"`);
+    	
+	setCurrentRenderer turtle;
+	
+	setAttr "defaultRenderGlobals.animation" 1;
+	setAttr "defaultRenderGlobals.animationRange" 0;
+
+	setAttr "TurtleRenderOptions.enableGI" 1;
+	setAttr "TurtleRenderOptions.rtEnvironment" 2;
+
+
+	int $xRes = `getAttr "defaultResolution.width"`;
+	int $yRes = `getAttr "defaultResolution.height"`;
+	int $startFrame = `getAttr "defaultRenderGlobals.startFrame"`;
+	int $endFrame = `getAttr "defaultRenderGlobals.endFrame"`;
+	int $byFrameStep = `getAttr "defaultRenderGlobals.byFrameStep"`;
+	
+	string $path = `workspace -q -fn`;
+	string $dir = `workspace -q -fileRuleEntry "images"`;
+	string $name = `getAttr "defaultRenderGlobals.imageFilePrefix"`;
+	
+	if ($name == "")  // if name not specified use file name
+	    {
+    	$file = `file -q -sceneName -shortName`;
+    	tokenize $file "." $fileTokens;
+    	$name = $fileTokens[0];
+    	}
+	if ($name == "")  // if no filename you generic name
+	    $name = "image";
+	        
+	//query image name
+	string $fullPath = ($path + "/" + $dir + "/" + $name);
+	
+	string $allCameraShapes[] = `ls -cameras`;
+	string $renderableCameras[];
+	for ($i = 0; $i < size($allCameraShapes); $i++) {
+    	int $j =0;
+		if (`getAttr ($allCameraShapes[$i] + ".renderable")`) 
+		{
+		    $renderableCameras[$j] = $allCameraShapes[$i];
+		    $j++;
+		}
+	}
+	string $camera[] = `listRelatives -p $renderableCameras[0]`;
+
+    //open render view
+    RenderViewWindow;
+
+	//int $i;
+	for( $i=$startFrame; $i<($endFrame+1); ++$i )
+	{
+	   int $frame = `currentTime -q`;
+	   ilrRenderCmd -camera $camera[0] -resolution $xRes $yRes -frame $frame -layer defaultRenderLayer;
+	   string $file = ($fullPath + "." + $i);
+	   renderWindowEditor -edit -writeImage $file "renderView";
+	   print ("Rendering " + $file + "\n");
+	   currentTime ($i+$byFrameStep);
+	}
+
+    // open fcheck for sequence
+    //
+    //string $startFile = ($fullPath + "." + $startFrame);   
+    //$fcheck = (`getenv "MAYA_LOCATION"` + "/bin/fcheck.exe");
+    //system("start " + $fcheck + " " + $startFile);
+    //system("start " + $fcheck);
+        
+
+    if (`exists bt_openNativeBrowser`)
+        bt_openNativeBrowser ($path + "/" + $dir);
+
+}

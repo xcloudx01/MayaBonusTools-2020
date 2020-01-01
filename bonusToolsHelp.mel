@@ -1,0 +1,31 @@
+// ===========================================================================
+// Copyright 2018 Autodesk, Inc. All rights reserved.
+//
+// Use of this software is subject to the terms of the Autodesk license
+// agreement provided at the time of installation or download, or which
+// otherwise accompanies this software in either electronic or hard copy form.
+// ===========================================================================
+
+// bonusToolsHelp.mel
+
+// string $doc: help file to display
+//	i.e. "docs/bonusTools60.html"
+
+global proc bonusToolsHelp(string $doc){
+
+	string $btPath = `whatIs bonusToolsMenu`;
+	//string $buffer[];
+	//subtract magic number of 24: "Mel procedure found in: "
+	int $numCharacters = `size($btPath)`;
+	$btPath = `endString $btPath ($numCharacters-24)`;
+	//subtract magic number of 18: "scripts/bonusToolsMenu.mel"
+	$numCharacters = `size($btPath)`;
+	$btPath = `substring $btPath 1 ($numCharacters-32)`;
+	//add new docs path
+	//$btPath += "docs/bonusTools60.html";
+	$btPath = "file:\/\/" + $btPath + $doc;
+
+	showHelp -absolute $btPath;
+	
+
+}

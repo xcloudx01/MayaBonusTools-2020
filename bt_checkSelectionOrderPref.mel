@@ -1,0 +1,27 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_checkSelectionOrderPref()
+    {
+    $state = `selectPref -q -trackSelectionOrder`;
+    
+    if ($state == 0)
+        {
+        $response = `confirmDialog -title "Select Order" -message "In order to use this tool the component selection order must be tracked.  \n\n   Do you want to enable \"Track Selection Order\" in the global prefs?" 
+            -button "Yes" -button "No" -defaultButton "Yes"-cancelButton "No" -dismissString "No"`;
+        if ($response == "Yes")
+            {
+            selectPref -trackSelectionOrder true;
+    	    inViewMessage -smg "Selection order tracking has been enabled but you'll now need to reselect UVs and run again." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;        
+            error "Selection order tracking has been enabled but you'll now need to reselect UVs and run again.  You will only need to do this once";
+            }
+
+        else 
+            error "Canceling operation because component selection order can not be tracked.  Run again to enable or manually change setting in global prefs.";
+                
+        }
+    }
+    
+

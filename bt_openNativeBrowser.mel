@@ -1,0 +1,37 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+
+global proc bt_openNativeBrowser(string $folder)
+{
+    //open a native OS file browser to given folder/path
+	if (`filetest -d $folder`)
+	{
+		if (`about -linux`)
+		    {
+			system("nautilus " + $folder);
+			print ("\nOpening Nautilus file browser to:  " + $folder);
+			warning("Linux:  Nautilus file manager is required for this feature.");
+		    }
+		else if (`about -win`)			
+			{
+			string $converted = `substituteAllString $folder "/" "\\"`;
+			system("start explorer " + $converted);
+			print ("\nOpening Windows Explorer to:  " + $folder);
+			}
+					
+		else if (`about -mac`)
+			{
+			system("open " + $folder);
+			print ("\nOpening Finder to:  " + $folder);
+    		}
+		else
+		  	{
+			warning ("Cannot open folder: " + $folder);
+		 	}
+	}
+	else
+	    error ("Path - " + $folder + " - does not exist\n");
+}

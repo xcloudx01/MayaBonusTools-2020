@@ -1,0 +1,105 @@
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+
+global proc bt_assignNewMaterialForSelected()
+{
+    string $objects[] = `filterExpand -sm 10 -sm 12`;
+    
+    if (`size $objects` < 1)
+        error "At least one mesh or surface needs to be selected.  Select one a try again.\n";
+    
+    
+    if (`optionVar -ex bt_randomizeNewMaterialColor` == 0)
+        optionVar -iv bt_randomizeNewMaterialColor  0;
+
+    if (`optionVar -ex bt_newMaterialType` == 0)
+        optionVar -iv bt_newMaterialType  1;
+        
+    if (`optionVar -q bt_newMaterialType` == 0) 
+        $shaderType = "lambert";
+    else    
+        $shaderType = "aiStandardSurface";
+            
+    for ($object in $objects)
+        {
+        string $shadingNode = `shadingNode -asShader $shaderType -name ($object + "_shader")`;
+        
+        print ("Created and assigned " + $shadingNode + " for " + $object + "\n");
+        if (`optionVar -q bt_randomizeNewMaterialColor` == 1)
+            {
+            if (`optionVar -q bt_newMaterialType` == 0) 
+                {   
+                setAttr ($shadingNode+".colorR") (rand(0.5 ,0.7));
+                setAttr ($shadingNode+".colorG") (rand(0.5 ,0.7));
+                setAttr ($shadingNode+".colorB") (rand(0.5 ,0.7));
+                }
+            else 
+                {   
+                setAttr ($shadingNode+".baseColorR") (rand(0.5 ,0.7));
+                setAttr ($shadingNode+".baseColorG") (rand(0.5 ,0.7));
+                setAttr ($shadingNode+".baseColorB") (rand(0.5 ,0.7));
+                }
+            }
+          
+        
+        string $shaderGroup = `sets -renderable true -noSurfaceShader true -empty -name ($shadingNode + "SG")`;
+        connectAttr -f ($shadingNode + ".outColor") ($shadingNode + "SG.surfaceShader");
+        //assignCreatedShader "lambert" "" lambert3 "Stormont_Dundas_26";
+    
+        select -r $object;
+        sets -e -forceElement $shaderGroup;
+        }
+        
+    select -cl;
+}
+
+
+
+global proc bt_assignNewMaterialForSelectedWin()
+{
+	//Creat UI and prompt user
+	//
+	global string $textName;
+	if( (`window -exists bt_assignNewMaterialsUI`) == true )
+	{
+		deleteUI bt_assignNewMaterialsUI;
+		windowPref -remove bt_assignNewMaterialsUI;
+	}
+	
+	window  
+		-width 300 -h 65
+		-title "Assign New Material(s)" bt_assignNewMaterialsUI;
+		
+    columnLayout;		
+
+    text -l "";
+    checkBox -al "right" -label "  Randomize Material Color"
+        -ann "Assign a new default material to each selected mesh / surface"
+        -onc "optionVar -iv bt_randomizeNewMaterialColor 1"
+        -ofc "optionVar -iv bt_randomizeNewMaterialColor 0"
+        -v `optionVar -q bt_randomizeNewMaterialColor`;
+
+    
+    checkBox -al "right" -label "  Arnold Standard Surface Shader"
+        -ann "x"
+        -onc "optionVar -iv bt_newMaterialType 1"
+        -ofc "optionVar -iv bt_newMaterialType 0"
+        -v `optionVar -q bt_newMaterialType`;
+    
+    rowColumnLayout -numberOfColumns 3
+            -columnWidth 1 100
+            -columnWidth 2 100 	    
+            -columnWidth 3 100;	  
+              
+    separator;separator;separator;            
+	button -label "Create" 
+		-command ("bt_assignNewMaterialForSelected; deleteUI bt_assignNewMaterialsUI;");
+	button -label "Apply" 
+		-command ("bt_assignNewMaterialForSelected;"); 
+	button -label "Close" 
+		-command ("deleteUI bt_assignNewMaterialsUI;windowPref -remove bt_assignNewMaterialsUI");
+	
+	showWindow bt_assignNewMaterialsUI;	
+}

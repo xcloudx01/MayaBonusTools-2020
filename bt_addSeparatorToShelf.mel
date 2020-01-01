@@ -1,0 +1,32 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_addSeparatorToShelf()
+{
+    global string $gShelfTopLevel;
+		
+    //make shelf separator on current shelf
+	if (`tabLayout -exists $gShelfTopLevel`)	
+	    {
+        separator
+			-parent ($gShelfTopLevel + "|" + `tabLayout -q -st $gShelfTopLevel`)
+            -enable 1
+            -width 12
+            -height 35
+            -manage 1
+            -visible 1
+            -preventOverride 0
+            -enableBackground 0
+            -style "shelf"
+            -horizontal 0;
+		print ("Creating separator on shelf: " + `tabLayout -q -st $gShelfTopLevel`);
+	    }
+	else
+		error ("Must have active shelf to create separtor.  Select a shelf and try again.");
+}
+
+
+
+

@@ -1,0 +1,99 @@
+// Print Bifrost-related data. Useful in the "Pre-Render Frame MEL" field of
+// Render Options, so batch processing (playblasting, exporting meshes, etc)
+// can be closely monitored.
+//
+// Usage: simply put 'bifrostMemUsage' in the Pre-Render Frame MEL field under
+// Render Globals > Render Options.
+//
+// Also handy to put in a per-frame expression.
+//
+// adrian.graham@autodesk.com
+// 01/24/14
+
+global float $ELAPSED;
+
+global proc bifrostMemUsage() {
+
+    // Initialize values.
+    float $denom = 1024.0;
+    float $frame = `currentTime -q`;
+    print( "\n[bifrostMemUsage] FRAME "+$frame+"\n" );
+
+    // Initialize python.
+    global float $ELAPSED;
+    python( "import time" );
+
+    // Determine time since proc was last run.
+    float $time = python( "'%.02f' % (time.time()-float("+$ELAPSED+"))" );
+    if( float($time) < 1000000.0 )
+        print( "\telapsed since last eval: "+$time+" seconds\n" );
+    // end if
+
+    $ELAPSED = python( "time.time()" );
+
+    // The 'locale' module helps add separators to large numbers.
+    python( "import locale" );
+    python( "locale.setlocale(locale.LC_ALL, '')" );
+
+    // Get memory data.
+    string $date_time = `date`;
+    string $total = float( `memory -mb -phy` ) / $denom;
+    string $used = float(`memory -mb -heapMemory`) / $denom;
+
+    // Maya's 'memory' command doesn't work properly on *nix, so we use a
+    // different method to determine how much memory is being used.
+    if( !`about -windows` ) {
+
+        python( "import resource" );
+        $used = python( "resource.getrusage( resource.RUSAGE_SELF ).ru_utime / "+$denom );
+
+    }
+
+    // Calculate how much free memory remains.
+    string $free = float($total) - float($used);
+
+    // Make Mb amounts read nicer.
+    $free = python( "'%.02f' % "+$free );
+    $used = python( "'%.02f' % "+$used );
+
+    // Calculate percentage and print
+    float $perc = (float($used)/float($free))*100.0;
+    $perc = python( "'%.02f' % "+$perc );
+
+    // Prepare output for printing.
+    string $mem_output = "\t"+$date_time+"\n";
+    $mem_output       += "\tMemory used/free: "+$used+"Gb/"+$free+"Gb ("+$perc+"%)\n";
+
+    // List all containers in scene.
+    string $containers[] = `ls -type bifrostContainer`;
+
+    // Iterate over all containers.
+    for( $container in $containers ) {
+
+        $mem_output += "\n\t"+$container+"\n";
+        if( `objExists ($container+".masterVoxelSize")` ) {
+            float $mvs = `getAttr ($container+".masterVoxelSize")`;
+            $mem_output += "\t\tMVS: "+$mvs+"\n" ;
+        } // end if
+
+        // Get associated Bifrost object.
+        string $bifrost_shapes[] = `listConnections -shapes on -type bifrostShape $container`;
+        for( $shape in $bifrost_shapes ) {
+            string $num_parts = `getAttr( $shape+".outNumParticles")`;
+            string $num_voxels = `getAttr( $shape+".outNumVoxels")`;
+
+            $num_parts   = python( "format( "+int($num_parts)+", 'n' ).decode(locale.getpreferredencoding())" );
+            $num_voxels  = python( "format( "+int($num_voxels)+", 'n' ).decode(locale.getpreferredencoding())" );
+            $mem_output += "\t\t"+$shape+"\n" ;
+            $mem_output += "\t\t\tParticles: "+$num_parts+"\n" ;
+            $mem_output += "\t\t\tVoxels: "+$num_voxels+"\n" ;
+        } // for shape
+
+    } // for container
+
+    $mem_output += "\n";
+
+    // Finally, print data.
+    print( $mem_output );
+
+} // end bifrostMemUsage

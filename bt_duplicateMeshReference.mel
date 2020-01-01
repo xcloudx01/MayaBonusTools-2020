@@ -1,0 +1,100 @@
+//
+// Author:             Steven T. L. Roselle
+//
+// Creation Date:      ( 06/06/00 )
+// Last Update:        ( 04/01/15 )
+//
+
+
+global proc bt_duplicateMeshReference()
+{
+	// get list of selected objects and filter out for poly meshes only
+	//
+	string $selList[] = `filterExpand -sm 12` ;
+	string $selList2[];
+	int $c = 0;
+
+	// step through each poly object in the list
+	//
+	for ($srcObj in $selList)
+		{
+
+		// get shape for the object
+		//
+		$relList = `listRelatives -shapes $srcObj` ;
+		string $srcShape = $relList[0] ;
+
+		// generate the target transform node by duplicating source
+		//
+		string $newName = $srcObj+"_ref";
+		string $dupList[] = `duplicate -name $newName $srcObj`;
+		string $targObj = $dupList[0];
+
+		// or by creating new transform node at origin
+		//
+		//string $targObj = `createNode "transform" -n $srcObj`;
+		
+		// delete duplicate mesh/shape and recreate empty shape node
+		//
+		
+		$relList = `listRelatives -f -shapes $targObj` ;
+		string $targShape = $relList[0] ;
+		select -r $relList;
+		//select -d $relList[0];
+		delete;
+		string $targShape = `createNode "mesh" -n $targShape -p $targObj` ;
+
+		// Now we have:
+		//
+		//     $srcObj - source object transform node
+		//     $srcShape - source object shape (mesh) node
+		//
+		//     $targObj - target object transform node
+		//     $targShape - target object shape (mesh) node
+		//
+
+		// Make upstream connection from shape of source and
+		// downstream connection to source's shading group
+		//
+		connectAttr -f ($srcShape+".outMesh") ($targShape+".inMesh") ;
+		string $shadeGrp[] = `listConnections  -t shadingEngine $srcShape`;
+		string $combined =  $targObj+"|"+$targShape+".instObjGroups[0]";
+		//string $combined =  "|"+$targObj+"|"+$targShape+".instObjGroups[0]";
+
+		
+		//make sure shader assignments are preserved
+		//defaultNavigation -source $shadeGrp[0] -destination $combined -connectToExisting;
+        select -r $srcObj;
+        select -add $targObj;
+        transferShadingSets -sampleSpace 1 -searchMethod 3;
+
+		// Temporarily select all verts on target object, then clear selection
+		// Not sure why - but must be done to avoid double xform on verts later
+		// Parts snipped from PolySelectConvert.mel
+		//
+		select -r $targObj;
+		string $verts[] = `polyListComponentConversion -ff -fe -fuv -fvf -tv`;
+		string $convert = "select -r \""+$verts[0]+"\"";
+		eval $convert;
+		select -cl;
+
+		//PolySelectConvert 3; // <- mel procedure that only gets source through UI
+
+		// Make selection list for new reference objects
+		// 
+		$selList2[$c] = $targObj;
+		$c ++;
+
+		}
+
+	// Select all new reference objects
+	//
+	select -r $selList2;
+
+}
+
+//bt_duplicateMeshReference ;
+
+
+
+

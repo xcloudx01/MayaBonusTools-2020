@@ -1,0 +1,115 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc int bt_setEdgeSegment(string $id)
+{
+	int $val = (`optionMenu -q -sl $id` - 1);
+
+
+	if ($val == 0)
+		{
+	    inViewMessage -smg "Edge segment snapping disabled." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        snapMode -edgeMagnetTolerance 0;
+        snapMode -curve false;
+		}
+	if ($val == 1)
+		{
+	    inViewMessage -smg "Middle mouse click on an edge to snap to center of edge." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        snapMode -edgeMagnetTolerance 100;
+        snapMode -curve true;
+		optionVar -iv bt_edgeSegment $val;
+		snapMode -edgeMagnet $val;
+		}
+	if ($val == 2)
+		{
+	    inViewMessage -smg "Middle mouse click on an edge to snap to third of edge." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        snapMode -edgeMagnetTolerance 100;
+        snapMode -curve true;
+		optionVar -iv bt_edgeSegment $val;
+		snapMode -edgeMagnet $val;
+		}
+	if ($val == 3)
+		{
+	    inViewMessage -smg "Middle mouse click on an edge to snap to quarter edge." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        snapMode -edgeMagnetTolerance 100;
+        snapMode -curve true;
+		optionVar -iv bt_edgeSegment $val;
+		snapMode -edgeMagnet $val;
+		}		
+	if ($val == 4)
+		{
+	    inViewMessage -smg "Middle mouse click on an edge to snap to 1/5th of edge." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        snapMode -edgeMagnetTolerance 100;
+        snapMode -curve true;
+		optionVar -iv bt_edgeSegment $val;
+		snapMode -edgeMagnet $val;
+		}	
+	if ($val == 5)
+		{
+		PreferencesWindow;
+		switchPrefTabs 25;
+		}
+	return $val;
+}
+	
+	
+	
+global proc bt_edgeSegmentSnapSettings(){
+
+    global string $bt_edgeSegmentOptionName;
+    
+	if( (`window -exists bt_edgeSegmentSnapSettingsUI`) == true )
+	{
+		deleteUI bt_edgeSegmentSnapSettingsUI;
+		windowPref -remove bt_edgeSegmentSnapSettingsUI;
+	}
+	
+	window -title  ("Edge Segment Snapping Settings") bt_edgeSegmentSnapSettingsUI;
+	columnLayout -w 400 ;	
+    					
+    					columnLayout -adjustableColumn true;
+									
+    					    rowColumnLayout -numberOfColumns 2 -columnWidth 1 150 -columnWidth 2 250;
+    	
+    							//text -l "Edge Snap  " -al center -ann "Easy access to settings for edge segment snapping (hold c key and use middle mouse button to snap)";
+    		
+    							int $edgeSnap;
+    							if (`snapMode -q -edgeMagnetTolerance` == 0) $edgeSnap = 0;
+    							else $edgeSnap = 1;
+    								    							
+    						    //text -l "Snap to Edge Divisions :  " -ann "Toggle global edge snapping pref (hold c key and use middle mouse button to snap to segment of desired edge)" -al right;
+    							//checkBox -l "  (toggle global edge snapping pref)" -al "left" -ann "Toggle global edge snapping pref (hold c key and use middle mouse button to snap to segment of desired edge)" -v $edgeSnap
+    							//	-onc "snapMode -edgeMagnetTolerance 100;"  //Max snapping tolerance
+    							//	-ofc "snapMode -edgeMagnetTolerance 0;";
+                                
+        		                text -l "Set Edge Divisions :  " -ann "Set divisions for edge snapping" -al right;   
+        		                  		
+    							$bt_edgeSegmentOptionName = `optionMenu -cc "bt_setEdgeSegment $bt_edgeSegmentOptionName" -ann "Set number of points for edge segment snapping"`;
+    								//menuItem -l "Off";
+    								menuItem -l "Off";
+    								menuItem -l "Mid Point";
+    								menuItem -l "Thirds";
+    								menuItem -l "Quarter";
+    								menuItem -l "Fifth";
+    								menuItem -l "User Prefs";
+    								
+    							if (`snapMode -q -edgeMagnet` > 3)
+    								optionMenu -e -sl  4 $bt_edgeSegmentOptionName;
+    							else if (`snapMode -q -edgeMagnet` == 0)
+    								optionMenu -e -sl 1 $bt_edgeSegmentOptionName;
+    							else
+    								optionMenu -e -sl `snapMode -q -edgeMagnet` $bt_edgeSegmentOptionName;	
+    										
+    						    setParent ..;  //column 
+    						    					
+    					    
+    				    setParent ..;  //column
+
+	
+
+	showWindow bt_edgeSegmentSnapSettingsUI;
+
+}
+

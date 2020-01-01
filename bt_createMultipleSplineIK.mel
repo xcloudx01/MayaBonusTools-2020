@@ -1,0 +1,36 @@
+
+//  Create Spline IK for multiple joint chains
+//  Useful for hair, tail, antena, etc...
+
+global proc bt_createMultipleSplineIK()
+
+    {
+    int $chainCount = 0;	
+	$rootList = `ls -sl -type joint`;
+		
+	if (`size $rootList` < 2)
+		error "Two or more neighboring root joints must be selected.";
+		
+	for ($root in $rootList)
+		{
+		int $jointCount = 1;
+	
+		select -r $root;
+		$base = `pickWalk -d up`;
+	
+	
+		select -r -hi $root;
+		$chain = `ls -sl -type joint`;
+		$size = `size $chain`;
+
+		$jointList[$chainCount] = $chain[$size-1];
+	
+	    select -r $root;
+	    select -add  $jointList[$chainCount];
+	    ikHandle -sol ikSplineSolver -scv false;
+	    
+		$chainCount++;
+		}
+	
+	select -r $rootList;
+	}

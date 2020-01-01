@@ -1,0 +1,453 @@
+// ===========================================================================
+// Copyright 2016 Autodesk, Inc. All rights reserved.
+//
+// Use of this software is subject to the terms of the Autodesk license
+// agreement provided at the time of installation or download, or which
+// otherwise accompanies this software in either electronic or hard copy form.
+// ===========================================================================
+//
+//  Procedure Name:
+//      buildTraversalMM
+//
+//  Description:
+//  Creates a marking menu that allows the user
+//  to traverse the DAG/DG based on the current object. 
+//
+//  Input Arguments:
+//      None
+//
+//  Return Value:
+//      None.
+
+proc string[] historyNodes( string $node, int $future )
+//
+//	Description:
+//		Given a node, return the nodes directly upstream from it (aka, its
+//	history), if $future is false, otherwise return the nodes directly
+//	downstream from it (aka, its future).
+//
+{
+	int $maxItemsPerScreen = 25;
+
+	string $chainFalse2[];
+	string $chainTrue2[];
+	string $itemsMenu[];
+	string $transforms[];
+
+	$transforms = `ls -typ transform $node`;
+	if( size($transforms) > 0 ) {
+		$chainFalse2 = `listHistory -lf false -bf -lv 1 -f $future -af $node`;
+	}
+
+	$chainTrue2 = `listHistory -lf true -bf -lv 1 -f $future -af $node`;
+
+	// Remove duplicates
+	//
+	string $nameItems[] = { $node };
+	string $moreStuff[] = stringArrayRemove( $chainFalse2, $chainTrue2 );
+	string $combined[] = stringArrayCatenate( $chainFalse2, $moreStuff );
+	string $noDupes[] = stringArrayRemove( $nameItems, $combined );
+
+	// Remove nodes in black box containers
+	//
+	// Add a dummy entry, since we have no original node that must be
+	// included.
+	//
+	$noDupes[size($noDupes)] = "";
+	string $final[] = filterBlackBoxNodes( $noDupes, false );
+	
+	// Go through the final list of nodes; if a node is a shading engine,
+	// replace it by the shader, since that's what the user is most likely to
+	// want to see (unless *this* node is already the shader - then show the
+	// shading engine).
+	//
+	int $numNodes = size($final);
+	int $i = 0;
+	while( $i < $numNodes ){
+		string $seNode = $final[$i];
+		if( ( $seNode != $node) && (`nodeType $seNode` == "shadingEngine") ){
+			string $relatedNodes[] = AEgetRelatedNodes( $seNode );
+			int $lastNode = size($relatedNodes)-1;
+			if( $lastNode > 0 ){
+				string $preferredNode = $relatedNodes[$lastNode];
+				if( $preferredNode != $node ){
+					$final[$i] = $preferredNode;
+				}
+			}
+		}
+		$i++;
+	}
+	return( $final );
+}
+
+proc int preferredNodeIndex( string $nodes[] )
+//
+//	Description:
+//		Given a list of n nodes, with n-1 unique nodes, followed by a
+//	duplicated node name in position n, the nth node represents the preferred
+//	node. Find the index that has this preferred node (0 if none).
+//
+{
+	int $numNodes = size($nodes)-1;
+	$preferredNode = $nodes[$numNodes];
+	if( $preferredNode != "" ){
+		int $i = 0;
+		while( $i < $numNodes ){
+			if( $nodes[$i] == $preferredNode ){
+				return $i;
+			}
+			$i++;
+		}
+	}
+	return(0);
+}
+
+proc int fillSpokes( string $preferredNode, string $nodes[], int $spokes[] )
+//
+//	Description:
+//		Given a preferred node, a list of nodes, and a list of spokes, fill as
+//	many spokes as possible with the given nodes, starting with the preferred 
+//	node. If there are more nodes than spokes, the first spoke (aka, the primary
+//	spoke) will be used to provide a link to the rest of the nodes. This may
+//	need to be done recursively to access all the nodes.
+//
+{
+	string $image;
+	string $moreLabel;
+	int $numFilled = 0;
+	int $spokeIndex = 0;
+	int $primarySpoke = $spokes[$spokeIndex];
+	string $preferredNodes[] = $nodes;
+	$preferredNodes[size($preferredNodes)] = $preferredNode;
+	int $preferredIndex = preferredNodeIndex( $preferredNodes );
+	string $overflowSpokes;
+	switch( $primarySpoke ){
+		case 0:
+			$moreLabel = "Parents...";
+			$overflowSpokes = "{0,7,1,6,2}";
+			$image = "selectObj.png";
+			break;
+		case 2:
+			$moreLabel = "Downstream...";
+			$overflowSpokes = "{2,1,3,0,4}";
+			$image = "futurePulldownIcon.png";
+			break;
+		case 4:
+			$moreLabel = "Children...";
+			$overflowSpokes = "{4,3,5,2,6}";
+			$image = "selectComp.png";
+			break;
+		case 6:
+			$moreLabel = "Upstream...";
+			$overflowSpokes = "{6,5,7,4,0}";
+			$image = "historyPulldownIcon.png";
+	}
+	global string $gSpokes[];
+
+	int $numNodes = size($nodes);
+	int $numSpokes = size($spokes);
+	int $numPrimary = $numSpokes;
+	if( $numNodes > $numSpokes ){
+		// The primary spoke gets the menu for the overflow nodes
+		//
+		$numPrimary--;
+		$numFilled++;
+		$spokeIndex++;
+		string $menu = `menuItem -subMenu 1 -image $image -label $moreLabel -radialPosition $gSpokes[$primarySpoke]`;
+		$cmd = "buildTraversalSubMenu \"\" " + $menu + " {";
+		int $needComma = false;
+		int $i = 0;
+		// We have to skip the best node, and as many of the initial as need be
+		// to that we skip a total of $numPrimary nodes.
+		//
+		int $numToSkip = $numPrimary;
+		while( $i < $numNodes ){
+			$i++;
+			if( $i == $preferredIndex ){
+				continue;
+			}
+			if( $numToSkip > 0 ){
+				$numToSkip--;
+				continue;
+			}
+			if( $needComma ){
+				$cmd += (", " );
+			} else {
+				$needComma = true;
+			}
+			$cmd += ("\"" + $nodes[$i-1] + "\"" );
+		}
+		$cmd += "} " + $overflowSpokes;
+		menu -e -pmc $cmd $menu;
+		setParent -menu ..;
+	}
+	int $i = 0;
+	int $firstLoop = true;
+	int $index;
+	while( $spokeIndex < $numSpokes ){
+		if( $firstLoop ){
+			$index = $preferredIndex;
+		} else {
+			if( $i == $preferredIndex ){
+				$i++;
+			}
+			$index = $i;
+		}
+		if( $index >= $numNodes ){
+			// We've filled in as many primary nodes as we could.
+			//
+			break;
+		}
+		string $node = $nodes[$index];
+		string $spoke = $gSpokes[$spokes[$spokeIndex]];
+		string $menu = `menuItem -subMenu 1 -image $image -label $node -radialPosition $spoke`;
+		string $cmd = "buildTraversalSubMenu " + $node + " " + $menu + " {} {}"; 
+		$numFilled++;
+		menu -e -pmc $cmd $menu;
+		setParent -menu ..;
+		$spokeIndex++;
+		if( $firstLoop ){
+			$firstLoop = false;
+			continue;
+		}
+		$i++;
+	}
+	return( $numFilled );
+}
+
+global proc buildTraversalSubMenu( string $node, string $parent, string $siblings[], int $overflowSpokes[] )
+//
+//	Description:
+//		Given a dependency node, and a (parent) marking menu, build a marking
+//	menu that lets a user visit nodes that are upstream (W), downstream (E), 
+//	parent (N), or children (S) of the node. If the node is empty, then use the
+//	sibling list to allow the user to visit one of the siblings, and use the
+//	value of overflowSpokes to choose the direction(s) in which to make these nodes
+//	available (e.g., towards E for downstream siblings).
+//
+{
+	global string $gSpokes[];
+	if( size($gSpokes) == 0 ){
+		$gSpokes = { "N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+	}
+	if( !`exists AEgetRelateNodes` ){
+		eval("source \"showEditor.mel\"");
+	}
+	string $preferredNode;
+	if( $node != "" ){
+		string $relatedNodes[] = AEgetRelatedNodes( $node );
+		int $lastNode = size($relatedNodes)-1;
+		if( $lastNode > 0 ){
+			$preferredNode = $relatedNodes[$lastNode];
+		}
+	}
+	global int $gTraversalMore;
+	if( $parent != "" ){
+		setParent -menu $parent;
+	}
+	string $currentPanel = `getPanel -withFocus`;
+	
+		
+	string $fmt;
+	string $label;
+	if( $node == "" ){
+		// More choices...
+		//
+		fillSpokes( $siblings[0], $siblings, $overflowSpokes );
+	} else {
+		// First, figure out how many neighbours we have, of each kind
+		//
+		// These are the types of spokes:
+		//
+		int $select = 0;
+		int $parent = 1;
+		int $upstream = 2;
+		int $child = 3;
+		int $downstream = 4;
+		int $available = 5;
+		int $numSpokesAvailable = 1;
+		// These are the default spoke assignments:
+		//
+		int $spokes[] = {$parent, $select, $downstream, $downstream,
+						$child, $child, $upstream, $upstream };
+
+		string $parents[] = stringArrayRemoveDuplicates(`listRelatives -allParents $node` );
+		string $downstreamNodes[] = stringArrayRemoveDuplicates(historyNodes( $node, true ) );
+		string $children[] = stringArrayRemoveDuplicates(`listRelatives -children $node` );
+		string $upstreamNodes[] = stringArrayRemoveDuplicates(historyNodes( $node, false ) );
+
+		int $numParents = size($parents);
+		int $numDownstream = size($downstreamNodes);
+		int $numChildren = size($children);
+		int $numUpstream = size($upstreamNodes);
+		int $counts[] = {$numParents, $numDownstream, $numChildren, $numUpstream};
+
+		string $allNodes[] = $parents;
+		$allNodes = stringArrayCatenate( $allNodes, $downstreamNodes );
+		$allNodes = stringArrayCatenate( $allNodes, $children );
+		$allNodes = stringArrayCatenate( $allNodes, $upstreamNodes );
+
+		// If there are duplicate nodes, remove them from the arrays that
+		// have the most nodes.
+		//
+		string $uniqueNodes[] = stringArrayRemoveDuplicates( $allNodes );
+		int $numAllNodes = size($allNodes);
+		int $numUniqueNodes = size($uniqueNodes);
+		if( $numUniqueNodes != $numAllNodes ){
+			int $allIndex = 0;
+			int $uniqueIndex = 0;
+			while( $allIndex < $numAllNodes ){
+				string $uniqueNode = $uniqueNodes[$uniqueIndex];
+				string $allNode = $allNodes[$allIndex];
+				if( $uniqueNode == $allNode ){
+					// Matching pair, advance unique counter
+					//
+					$uniqueIndex++;
+				} else if( $allNode != "" ){
+					// Found a duplicate that we haven't processed yet.
+					//
+					// First, blank all further entries of this type in
+					// $allNodes, so we don't try to process it a second
+					// time.
+					//
+					int $i = $allIndex;
+					while( $i < $numAllNodes ){
+						if( $allNode == $allNodes[$i] ){
+							$allNodes[$i] = "";
+						}
+						$i++;
+					}
+					// Next, determine which lists had this entry
+					//
+					int $hasDupe[4] = {false,false,false,false};
+					$hasDupe[0] = stringArrayContains( $allNode, $parents);
+					$hasDupe[1] = stringArrayContains( $allNode, $downstreamNodes);
+					$hasDupe[2] = stringArrayContains( $allNode, $children);
+					$hasDupe[3] = stringArrayContains( $allNode, $upstreamNodes);
+					// For the lists that had this entry, determine which
+					// list had the fewest number of children, and remove
+					// the item from all but that list.
+					//
+					$i = 0;
+					int $minCount = $numAllNodes;
+					int $keepIndex = -1;
+					while( $i < 4 ){
+						if( $hasDupe[$i] ){
+							if( $counts[$i] < $minCount ){
+								$minCount = $counts[$i];
+								$keepIndex = $i;
+							}
+						}
+						$i++;
+					}
+					$hasDupe[$keepIndex] = false;
+					if( $hasDupe[0] ){
+						$parents = stringArrayRemove( {$allNode}, $parents);
+						$numParents--;
+					}
+					if( $hasDupe[1] ){
+						$downstreamNodes = stringArrayRemove( {$allNode}, $downstreamNodes);
+						$numDownstream--;
+					}
+					if( $hasDupe[2] ){
+						$children = stringArrayRemove( {$allNode}, $children);
+						$numChildren--;
+					}
+					if( $hasDupe[3] ){
+						$upstreamNodes = stringArrayRemove( {$allNode}, $upstreamNodes);
+						$numUpstream--;
+					}
+				}
+				$allIndex++;
+			}
+		}
+
+		if( $numParents == 0 ){
+			$spokes[0] = $available;
+		}
+
+		if( $numDownstream < 2 ){
+			if( $numDownstream == 0 ){
+				$spokes[2] = $available;
+			}
+			$spokes[3] = $available;
+		}
+
+		if( $numChildren < 2 ){
+			if( $numChildren == 0 ){
+				$spokes[4] = $available;
+			}
+			$spokes[5] = $available;
+		}
+
+		if( $numUpstream < 2 ){
+			if( $numUpstream == 0 ){
+				$spokes[6] = $available;
+			}
+			$spokes[7] = $available;
+		}
+
+		// N - Parent
+		//
+		if( $numParents > 0 ){
+			int $parentSpokes[] = {0};
+			if( $spokes[7] == $available ){
+				$parentSpokes[size($parentSpokes)] = 7;
+			}
+			fillSpokes( $preferredNode, $parents, $parentSpokes );
+		}
+		// NE - Select
+		//
+		$fmt = "Select ^1s";
+		$label = `format -s $node $fmt`;
+		menuItem -label $label -command ("select -r " + $node) -radialPosition "NE";
+
+		// E - Downstream (aka, future)
+		//
+		if( $numDownstream > 0 ){
+			int $downstreamSpokes[] = {2,3};
+			int $numFilled = fillSpokes( $preferredNode, $downstreamNodes, $downstreamSpokes);
+			if( $numFilled < 2 ){
+				$spokes[3] = $available;
+			}
+		}
+
+		// S - Children
+		//
+		if( $numChildren > 0 ){
+			int $childrenSpokes[] = {4,5};
+			if( $spokes[3] == $available ){
+				$childrenSpokes[1] = 3;
+				$childrenSpokes[2] = 5;
+			}
+			int $numFilled = fillSpokes( $preferredNode, $children, $childrenSpokes );
+			if( $numFilled < size($childrenSpokes) ){
+				$spokes[5] = $available;
+			}
+		}
+
+		// W - Upstream (aka, history)
+		//
+		if( $numUpstream > 0 ){
+			int $upstreamSpokes[] = {6,7};
+			if( $spokes[5] == $available ){
+				$upstreamSpokes[2] = 5;
+			}
+			fillSpokes( $preferredNode, $upstreamNodes, $upstreamSpokes);
+		}
+	}
+	
+	if( $parent != "" ){
+		setParent -menu ..;
+	}
+}
+
+global proc buildTraversalMM( string $node )
+//
+//	Description:
+//		Build the traversal marking menu for the given node.
+//
+{
+	buildTraversalSubMenu( $node, "", {}, {} );
+}
+

@@ -1,0 +1,55 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_gpuStatus(int $mode)
+
+{
+    int $currentTime = `currentTime -q`;
+
+	if (`optionVar -q gpuOverride` == 0)
+	    error "Can not determine GPU Acceleration status unless GPU Overide is enabled in preferences.";
+
+	$evalMode = `evaluationManager -q -enabled`;
+	  
+	if ($evalMode == 0)
+	    error "Can not determine GPU Acceleration status when Evaluation Mode is set to DG.  Set to parallel or serial and try again.";
+
+    for ($i=0; $i<10; ++$i) 
+        nextOrPreviousFrame next; 
+    
+    if ($mode == 0)
+        {
+        print "\n\n** The following deformer chains in this scene are currently supported for GPU acceleration by the Evaluation Manager.\n\n";
+        deformerEvaluator -chains; 
+        print "\n";
+        warning "Checking scene for GPU acceleration.  A few frames were played in order to determine GPU Acceleration status, but frame was reset to original time.  See Script Editor for details.";
+        }
+    else if ($mode == 1)
+        {
+        print "\n\n** Checking selected objects for deformer chains that are currently supported for GPU acceleration by the Evaluation Manager.\n\n";
+        deformerEvaluator; 
+        print "\n";
+        $selected = `ls -sl`;
+        if (`size $selected` == 0)
+            warning "Nothing selected, try again.";
+        else    
+            warning "Checking selected for GPU acceleration.  A few frames were played in order to determine GPU Acceleration, but frame was reset to original time.  See Script Editor for details.";
+        }  
+    else if ($mode == 2)
+        {
+        print "\n\n** Checking all skinCluster, blendShape, cluster and softMod nodes for GPU acceleration by the Evaluation Manager.\n\n";
+        //$deformers = `ls -type skinCluster -type blendShape -type cluster -type tweak -type softMod -type groupParts`;
+        $deformers = `ls -type skinCluster -type blendShape -type cluster -type softMod`;
+        select -r $deformers;
+        deformerEvaluator;
+        print "\n";
+        warning "Checking all skinCluster, blendShape, cluster and softMod nodes for GPU acceleration.  A few frames were played in order to determine GPU Acceleration status, but frame was reset to original time.  See Script Editor for details.";
+        }
+          
+   currentTime $currentTime;
+}
+
+
+//bt_gpuStatus 2

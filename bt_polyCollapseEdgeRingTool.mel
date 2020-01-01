@@ -1,0 +1,50 @@
+
+// Created by Steven T. L. Roselle 
+// Based on original tool by cpam
+// Last updated:      ( 04/01/15 )
+
+proc bt_polyCollapseEdgeRingToolCtx(){
+
+		
+	scriptCtx
+		-title "Poly Delete Edge Ring"
+		-image1 "polyDelEdge.png"
+		-totalSelectionSets 1
+        -setSelectionCount	0
+		
+        //-ts ("headsUpMessage -t 4 \"Select an edge and the associated edge ring will be Collapsed.\"")
+		-ts ("inViewMessage -smg \"Select an edge and the associated edge ring will be Collapsed.\" -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 2000;")
+		
+		-expandSelectionList true
+		-finalCommandScript ("PolyConvertToRingAndCollapse; polyDelEdge -cv true; headsUpMessage -t 4 \"Select an edge and the associated edge ring will be Collapsed.\"")
+
+		-setNoSelectionPrompt "Select an edge and the associated edge ring will be Collapsed."
+		-setAutoComplete true
+		-polymeshEdge true
+		-toolCursorType "create"
+		-exitUponCompletion false
+
+		
+		bt_polyCollapseEdgeRingTool;
+	
+}
+
+
+global proc bt_polyCollapseEdgeRingTool(){
+	
+	if (!`contextInfo -exists bt_polyCollapseEdgeRingTool`)
+	{
+	    bt_polyCollapseEdgeRingToolCtx;
+	}
+    setSelectMode components Components; selectType -smp 0 -sme 1 -smf 0 -smu 0 -pv 0 -pe 1 -pf 0 -puv 0;
+    select -cl;
+	setToolTo bt_polyCollapseEdgeRingTool;
+    print ("Select edges to automatically collapse associated edge ring\n");
+    inViewMessage -smg "Select an edge and the associated edge ring will be Collapsed." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 2000;
+}
+
+
+/*
+deleteUI bt_polyCollapseEdgeRingTool;
+*/
+

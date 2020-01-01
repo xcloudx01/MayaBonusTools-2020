@@ -1,0 +1,24 @@
+
+global proc bt_createLocatorsAtVertices()
+{
+	float $position[3];
+	string $currentLocator[];
+	string $allLocators[];
+	int $c=0;
+
+    ConvertSelectionToVertices;
+	string $vertices[] = `filterExpand -ex 1 -fp 1 -sm 31`;
+	if (!size($vertices))	error "No mesh or components selected.";
+
+	for ($vtx in $vertices)
+    	{
+		$position = `pointPosition -w $vtx`;
+		$currentLocator = `spaceLocator`;
+		$allLocators[$c] = $currentLocator[0];
+		move -a $position[0] $position[1] $position[2] $allLocators[$c];
+		scale -a 0.1 0.1 0.1 $allLocators[$c];
+		$c++;
+    	}
+    print ("Created " + $c + " locators\n");
+	group -n "vertexLocatorGroup" $allLocators;
+}

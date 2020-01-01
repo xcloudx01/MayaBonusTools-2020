@@ -1,0 +1,78 @@
+
+//  Credit :  based on original scalePosition script by: Jakob Welner
+
+
+global proc bt_proportionalPlacement()
+{
+	string 	$objects[] = `ls -objectsOnly -sl`;
+	
+	if (size($objects) > 0)
+	{
+		float	$objPos[];
+		string	$locator[];
+		string	$locators[];
+		string	$constraint[];
+		string  $emptyStringArray[];
+	  	global string	$bt_proportionalPlacementManip;
+	  	global string	$bt_proportionalPlacementConstraints[];
+	    $bt_proportionalPlacementConstraints = $emptyStringArray;
+	    
+	    //create tmp transform node for grouping locators
+	    select -cl;
+	    $bt_proportionalPlacementManip = `createNode "transform" -name "tmp_manipGroup"`;
+	    
+	    //create locator for each object, position at same location, then contrain objects to locators
+		int		$c = 0;
+		for($obj in $objects)
+	    	{
+			$objPos = (`xform -q -t -ws $obj`);
+			$locator = `spaceLocator -n ("tmp_locator" + $c)`;
+			scale .0 .0 .0;
+			xform -ws -t $objPos[0] $objPos[1] $objPos[2] $locator[0];
+			
+			/*
+			setAttr -lock true  ($locator[0] + ".scaleX");
+			setAttr -lock true  ($locator[0] + ".scaleY");
+			setAttr -lock true  ($locator[0] + ".scaleZ");
+			*/
+			
+			$locators[size($locators)] = $locator[0];
+	
+			$constraint = `pointConstraint -n ("tmp_pointConstraint" + $c) $locator[0] $obj`;
+			$bt_proportionalPlacementConstraints[size($bt_proportionalPlacementConstraints)] = $constraint[0];
+			$c++;
+
+			$constraint = `orientConstraint -mo -n ("tmp_orentConstraint" + $c) $bt_proportionalPlacementManip $obj`;
+			$bt_proportionalPlacementConstraints[size($bt_proportionalPlacementConstraints)] = $constraint[0];
+			$c++;
+	    	}
+
+        //create parent node for Universal Manip to work on
+		select $locators;
+		select -add  $bt_proportionalPlacementManip;
+		//group -n "tmp_manipGroup";
+		parent;
+		
+		optionVar -sv "bt_proportionalPlacementManip" $bt_proportionalPlacementManip;
+
+		xform -cp $bt_proportionalPlacementManip; //center pivots
+		//hide $locators;
+		
+		setAttr ($bt_proportionalPlacementManip + ".displayHandle") 1;
+		
+		//activate Universal Manipuplator
+		select -r $bt_proportionalPlacementManip;
+		CenterPivot;
+		UniversalManip;
+		
+		inViewMessage -smg "Use Shift + Ctrl on Manip to constrain to center" -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+		warning "Temporary locators and constraints created for Proportional Placement will be automatically deleted on selection change.";
+
+
+		scriptJob -runOnce true -compressUndo true -e "SelectionChanged" "delete $bt_proportionalPlacementConstraints; delete $bt_proportionalPlacementManip; SelectTool; warning \"Temporary propoprtional placement nodes deleted.\" ";
+
+	}
+	else warning "Select two or more objects in order to proportional place and orient them in the scene";
+	
+	
+}

@@ -1,0 +1,17 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_polyNSidedToQuad()
+    {
+    ConvertSelectionToFaces;    
+    polySelectConstraint -m 2 -t 8 -sz 3;
+    polyTriangulate -ch 1 ; 
+    polyQuad  -a 30 -kgb 1 -ktb 1 -khe 1 -ws 1 -ch 0;
+    print ("Converted all selected n-sided faces to quads.\n");
+    polySelectConstraint -m 0;
+    resetPolySelectConstraint;
+    }
+
+

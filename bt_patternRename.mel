@@ -1,0 +1,703 @@
+//
+//
+// Bonus Tools Pattern Rename V2.0
+// 27.1.2011
+// 10.1.2017
+// (c) Autodesk 2017
+// Author Roland Reyer
+//
+// uses a list of patterns to remove or replace in object names
+// Example video: see channel of Roland Reyer
+//
+
+global string $patternRenameVersion = "2.0";
+global string $patternRenameWindowTitle = "Pattern Rename V2.0 (Jan 2017)";
+global string $patternRenameScriptHeader = "// Pattern Rename V2.0 (c) Autodesk 2017 - Roland Reyer";
+
+proc string[] standardWindow( string $windowName, string $title, string $buttons[])
+{
+	// this proc creates a standard window with a columnLayout and some button below
+	// if $windowName is empty, a new window will be created (otherwise the existing window is shown
+	//
+	// it returns an array with:
+	// - the UI name of the window
+	// - the UI name of the columnLayout
+	// - the names of the buttons
+	//
+	// The window is NOT shown, so that the contents can be added before the window appears
+	global string $PRlistResultsUI;
+	global string $PRdisplaySet;
+
+	if (!size($buttons)) error "The Window should have at least one Button";
+
+	string $result[];
+
+	if (!size($windowName)) $windowName = `window -w 406 -h 655 -title $title`;
+	else if (`window -exists $windowName`) {
+		showWindow $windowName;
+		return { $windowName } ;
+	} else window -w 406 -h 655 -title $title $windowName;
+
+	$result[0] = $windowName;
+
+	$form = `formLayout -nd 100`;
+
+		$tab = `tabLayout -tv 0 -scr 0 -cr 1`;		// fuer ein saubers resize der children muss -scr auf 0 stehen !!
+
+		$form2 = `formLayout -nd 100`;
+
+			$result[1] = `columnLayout -adj true`;	// the upper part of the window with the rules list
+
+			setParent $form2;
+			// this is the lower part:
+			// - a text
+			// - the display settings
+			// - the results list
+			$t = `text -h 20 -label "Resulting Names"`;
+			$PRdisplaySet = `checkBoxGrp				// display settings
+		        -numberOfCheckBoxes 3
+		        -label "Display"
+		        -cw 1 80
+		        -labelArray3 "Path Names" "Namespaces" "Verbose"
+		        -cat 1 "right" 10`;
+
+			$PRlistResultsUI = `textScrollList -allowMultiSelection 1 `;		// the results list
+
+			// two buttons for "Remove Selected" and "Keep only Selected"
+			$form3 = `formLayout -nd 100`;
+			$b1 = `button -label "Remove Selected" -c "patternRenameRemoveSelected()"`;
+			$b2 = `button -label "Keep only Selected" -c "patternRenameKeepSelected()"`;
+			formLayout -e
+					-attachForm		$b1	"left"	10
+					-attachPosition 	$b1	"right" 5 50
+					-attachPosition 	$b2	"left" 5 50
+					-attachForm		$b2	"right" 10
+				$form3;
+
+
+		// now attach all the pieces to the formLayout
+		formLayout -edit
+			-attachForm		$result[1]	"top"	0			// the columnLayout
+			-attachForm		$result[1]	"left"	0
+			-attachForm		$result[1]	"right"	0
+			-attachNone		$result[1]	"bottom"
+
+			-attachControl	$PRdisplaySet	"top"	0 $result[1]		// the display settings
+			-attachForm		$PRdisplaySet	"left"	5
+			-attachForm		$PRdisplaySet	"right"	5
+			-attachNone		$PRdisplaySet	"bottom"
+
+			-attachControl	$t	"top"	0 $PRdisplaySet		// the text above the results list
+			-attachForm		$t	"left"	5
+			-attachForm		$t	"right"	5
+			-attachNone		$t	"bottom"
+
+			-attachControl	$PRlistResultsUI	"top" 5 $t			// the results list
+			-attachForm		$PRlistResultsUI	"left"	0
+			-attachForm		$PRlistResultsUI	"right"	0
+			-attachControl		$PRlistResultsUI	"bottom" 5 $form3
+
+			-attachNone		$form3	"top" 		// the buttons keep and remove
+			-attachForm		$form3	"left"	0
+			-attachForm		$form3	"right"	0
+			-attachForm		$form3	"bottom" 0
+		$form2;
+
+// now create all the buttons in the list "$buttons" and attech them in the formLayout
+		setParent $form;
+
+		$sep = `separator -h 10`;
+
+		for ( $b in $buttons ) $result[size($result)] = `button -label $b`;
+
+// the tabLayout and the separator are attached at the top of the window
+		formLayout -edit
+			-attachForm		$tab	"top"	10			// the tabLayout
+			-attachForm		$tab	"left"	5
+			-attachForm		$tab	"right"	5
+			-attachControl	$tab	"bottom" 5 $sep
+
+			-attachNone		$sep	"top"			// the separator
+			-attachForm		$sep	"left"	5
+			-attachForm		$sep	"right"	5
+			-attachControl	$sep	"bottom" 5 $result[2]
+		$form;
+
+		int $last = size($result) - 1;
+
+		// attach the first button at left and bottom - and the last at right and bottom
+		// if its only one button, then its completely attached
+		formLayout -edit
+			-attachNone		$result[2]		"top"
+			-attachForm		$result[2]		"left" 5
+			-attachForm		$result[2]		"bottom" 5
+
+			-attachNone		$result[$last]		"top"
+			-attachForm		$result[$last]		"right" 5
+			-attachForm		$result[$last]		"bottom" 5
+		$form;
+
+		int $gapStep = 100 / size($buttons);
+		for ( $i=3 ; $i<size($result) ; $i++ ) {		// attach all the gaps between the buttons
+			formLayout -edit
+			
+				-attachPosition	$result[$i-1]	"right" 2 ($gapStep * ($i-2))
+
+				-attachPosition	$result[$i]		"left" 2 ($gapStep * ($i-2))
+				-attachForm		$result[$i]		"bottom" 5
+			$form;
+		}
+
+	return $result;
+}
+
+// global string $PRobjects[];
+// global string $PRsearchUI;		// UI name of the input field
+// global string $PRsearch[];		// list of strings to search
+// global string $PRreplaceUI;		// UI name of the input field
+// global string $PRreplace[];		// list of strings to replace
+// global string $PRlistSubsUI;
+// global string $PRlistResultsUI;
+// global string $PRmaxIterUI;
+// global string $PRprefixUI;
+
+
+
+global proc PRsaveToShelf()
+// saves the current rename to shelf
+// that shelf button will rename the current selection
+{
+global string $patternRenameScriptHeader;
+global string $PRsearch[];		// list of strings to search
+global string $PRreplace[];		// list of strings to replace
+global string $PRmaxIterUI;
+global string $PRprefixUI;
+
+	if (!size($PRsearch)) {
+		warning -n "Pattern Rename: No search patterns found for Shelf button";
+		return;
+	}
+	string $text;
+	string $iconText;
+	string $result = `promptDialog
+		-title "Rename Object"
+		-message "Please enter a short help text for the Shelf Button:    \n(the first four letters are the icon label)"
+		-button "OK" -button "Cancel"
+		-defaultButton "OK" -cancelButton "Cancel"
+		-dismissString "Cancel"`;
+
+	if ($result == "OK") {
+		$text = `promptDialog -query -text`;
+		if (size($text)>3) $iconText = substring( $text, 1, 4);
+		else $iconText = $text;
+		if ($iconText=="") $iconText = "PatR";
+	} else return;		// User hit Cancel
+
+	int $maxIter = `intFieldGrp -q -v1 $PRmaxIterUI`;
+	string $prefix = `textFieldGrp -q -text $PRprefixUI`;
+
+	string $shelfScript = $patternRenameScriptHeader + "\n// " + encodeString($text) + "\n\n";
+	$shelfScript += "source bt_patternRename.mel;\n";
+	$shelfScript += "{\n\tstring $prefix = \"" + $prefix + "\";\n";
+	$shelfScript += "\tint $maxIter = " + $maxIter + ";\n";
+	$shelfScript += "\tglobal string $PRsearch[];\n";
+	$shelfScript += "\tglobal string $PRreplace[];\n";
+	$shelfScript += "\tglobal string $PRmaxIterUI;\n";
+	$shelfScript += "\tglobal string $PRprefixUI;\n";
+
+	$shelfScript += "\tstring $search[] = {";
+	for ( $i=0 ; $i<size($PRsearch) ; $i++ ) $shelfScript += " \"" + encodeString( $PRsearch[$i]) + "\"" + ($i<size($PRsearch)-1 ? "," : " };\n");
+	$shelfScript += "\tstring $replace[] = {";
+	for ( $i=0 ; $i<size($PRsearch) ; $i++ ) $shelfScript += " \"" + encodeString( $PRreplace[$i]) + "\"" + ($i<size($PRsearch)-1 ? "," : " };\n");
+
+	$shelfScript += "\tif (`window -exists \"patternRenameWin\"`) {\n";
+	$shelfScript += "\t\t$PRsearch = $search;\n";
+	$shelfScript += "\t\t$PRreplace = $replace;\n";
+	$shelfScript += "\t\tintFieldGrp -e -v1 $maxIter $PRmaxIterUI;\n";
+	$shelfScript += "\t\ttextFieldGrp -e -text $prefix $PRprefixUI;\n";
+	$shelfScript += "\t\tpatternRenameUpdate();\n";
+	$shelfScript += "\t\tPRredrawSearchReplaceList(0);\n";
+	$shelfScript += "\t}\n";
+
+	$shelfScript += "\tstring $objects[];\n";
+	$shelfScript += "\tpatternRenameLoadSelected( $objects);\n";
+	$shelfScript += "\tstring $newName[] = $objects;\n";
+	$shelfScript += "\t$newName = doPatternRename( $newName, $search, $replace, $prefix, $maxIter);\n";
+	$shelfScript += "\tfor ( $i=0 ; $i<size($objects) ; $i++ ) {\n";
+	$shelfScript += "\t\tcatch( \`rename ($objects[$i]) (PRleafName($newName[$i]))\`);\n";
+
+	$shelfScript += "\t}\n}\n";
+
+	scriptToShelf ( $iconText, $shelfScript, true);
+}
+
+global proc int PRisValidObjectName( string $name)
+{
+// bug fix / the function isValidObjectName (match) has a bug
+	if ( !size(match( "^[a-zA-Z]", $name)) || size(match( "([^a-zA-Z0-9_])", $name)) || size( match( " ", $name))) return 0;		// special character or spaces or number at beginning found
+	else return 1;
+}
+
+//----------------------------------------------------------------
+// this function cuts an object path and returns just the leaf
+// should return the object name, if there are no path deviders
+global proc string PRleafName( string $obj)
+{
+	string $tmp[];
+	int $anz = tokenize( $obj, "|", $tmp);
+	return( $tmp[$anz-1]);
+}
+
+// this returns the path element of the object name, without the leaf
+// empty when there is no path
+proc string pathName( string $obj)
+{
+	int $i = size( $obj);
+	int $j = size(PRleafName($obj));
+	
+	if ($i > $j) return(substring( $obj, 1, ($i-$j)));
+	else return( "");
+}
+
+// filters all namespaces (path & Object names) and returns the string
+// used in display of the results list
+proc string filterNamespaces( string $path)
+{
+	string $tmp[];
+	string $tmpObj[];
+	string $newPath;
+	int $i;
+	int $anz = tokenize( $path, "|", $tmp);
+	for ( $o in $tmp) {
+		$i = tokenize( $o, ":", $tmpObj);
+		$newPath += "|" + $tmpObj[$i-1];
+	}
+	return( $newPath);
+
+}
+//------------------------------------------------------------------
+
+// this does the actual rename for the list of objects
+// renames only the leaf names, not the path part
+// returns a list of complete names (path+obj)
+global proc string[] doPatternRename( string $obj[], string $search[], string $replace[], string $prefix, int $maxIter)
+{
+	global int $PRdisplayVerbose;
+	int $warn = 0;
+
+	for ( $i=0 ; $i<size( $obj) ; $i++ ) {
+		string $leaf = PRleafName($obj[$i]);
+
+	// now separate the namespace(s) and keep
+		string $tmp[], $namespaces;
+		int $anz = tokenize( $leaf, ":", $tmp);
+		$namespaces = ($anz>1) ? (substring( $leaf, 1, (size($leaf)-size($tmp[$anz-1])))) : ("");
+		$leaf = $tmp[$anz-1];
+	// create the renamed names
+		for ( $j=0 ; $j<size($search) ; $j++ ) {
+			int $before = -1;
+			int $iter = 0;
+			do {
+				$before = size($leaf);
+				$leaf = substitute( $search[$j], $leaf, $replace[$j]);
+				$iter++;
+			} while ($before != size($leaf) && $iter<$maxIter);
+		}
+		$leaf = $prefix + $leaf;
+		if (!PRisValidObjectName( $leaf)) {
+			if ($PRdisplayVerbose) print("This name is not valid: >" + $leaf + "<\n");
+			$warn = 1;
+		}
+		$obj[$i] = pathName($obj[$i]) + $namespaces + $leaf;
+	}
+	if ($warn) warning -n "At least one name in the list is not valid!";
+	return $obj;
+}
+
+// global proc PRdropToList(string $dragControl, string $dropControl, string $msgs[], int $x, int $y, int $type) 
+// {
+// 	print("$dragControl = >" + $dragControl + "<\n");
+// 	print("$dropControl = >" + $dropControl + "<\n");
+// 	print("$msgs[]-----------------\n");
+// 	print ($msgs);
+// 	print("$msgs[]--ENDE---------------\n");
+// 	print("$type = >" + $type + "\n");
+// }
+
+
+// -----------------------------------------------------------------------------
+// the MAIN FUNCTION
+// builds the UI
+// -----------------------------------------------------------------------------
+global proc bt_patternRename()
+{
+global string $patternRenameWindowTitle;
+global string $PRobjects[];
+global string $PRmaxIterUI;
+global string $PRprefixUI;
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+global string $PRdisplaySet;	// the checkBoxGrp for Display Settings
+global int $PRdisplayPath = 1;		// status of the "path"
+global int $PRdisplayNS = 1;		// status of the "Namespaces"
+global int $PRdisplayVerbose = 0;		// status of the "Verbose"
+
+	if (`window -exists "patternRenameWin"`) {
+		showWindow patternRenameWin;
+		return;
+	}
+	string $uiNames[] = standardWindow( "patternRenameWin", $patternRenameWindowTitle, { "Rename", "Reload", "Refresh", "Shelf Button", "Close"});
+	setParent $uiNames[1];
+	$PRmaxIterUI = `intFieldGrp -label "Max Iterations" -v1 20	-cc "patternRenameUpdate()"`;
+	$PRprefixUI = `textFieldGrp -cc "patternRenameUpdate()" -label "Prefix" -text ""`;
+	separator -style "none" -h 10;
+
+// these are the two textFieldGrps for "search" and "replace"
+	$PRsearchUI = `textFieldGrp -label "Search" -text ""`;
+	$PRreplaceUI  = `textFieldGrp -label "Replace" -text ""`;
+
+// textFieldGrp will "update" the results when the user hits enter
+	textFieldGrp -e -cc ("patternRenameUpdate();setFocus " + $PRreplaceUI + ";") $PRsearchUI;
+
+// query the textField and set it to always initiate the enter command
+	string $tmp[] = `layout -q -ca $PRreplaceUI`;
+	textField -e -aie 1 -ec ("patternRenameAdd();setFocus " + $PRsearchUI + ";") $tmp[1];
+
+	separator -style "none" -h 10;
+
+//	$form = `formLayout -adj true`;
+	button -label "Add to List" -h 20 -c "patternRenameAdd()";
+	text -h 20 -label "Search / Replace Expressions";
+	
+	$PRlistSubsUI = `textScrollList -allowMultiSelection 1`;
+	textScrollList -e -sc ("{int $i[0] = `textScrollList -q -selectIndexedItem $PRlistSubsUI`; textFieldGrp -e -text$PRsearch[$i[0]-1] $PRsearchUI;  textFieldGrp -e -text $PRreplace[$i[0]-1] $PRreplaceUI ;patternRenameUpdate();}") $PRlistSubsUI;
+	separator -style "none" -h 10;
+	$form = `formLayout -nd 100`;
+	$b1 = `button -label "Remove" -c "patternRenameRemove()"`;
+	$b2 = `button -label "Clear All" -c "patternRenameClear()"`;
+	formLayout -e
+			-attachForm		$b1	"left"	10
+			-attachPosition 	$b1	"right" 5 50
+			-attachPosition 	$b2	"left" 5 50
+			-attachForm		$b2	"right" 10
+		$form;
+
+	setParent ..;
+	separator -style "none" -h 20;
+	// text -label "Resulting Names";
+	// $PRlistResultsUI = `textScrollList`;
+	
+	button -e -c ("patternRenameAdd();patternRenameGo()") $uiNames[2];		// RENAME Button
+	button -e -c ("patternRenameReload()") $uiNames[3];		// RELOAD Button
+	button -e -c ("patternRenameUpdate();PRredrawSearchReplaceList(0);") $uiNames[4];		// REFRESH Button
+	button -e -c ("PRsaveToShelf();") $uiNames[5];		// SHELF BUTTON
+	button -e -c ("deleteUI " + $uiNames[0]) $uiNames[6];		// CLOSE Button
+
+	checkBoxGrp -e -v1 $PRdisplayPath -v2 $PRdisplayNS -v3 $PRdisplayVerbose $PRdisplaySet;
+	checkBoxGrp -e -cc "patternRenameUpdate()" $PRdisplaySet;
+
+	patternRenameReload();
+	PRredrawSearchReplaceList(0);
+	showWindow $uiNames[0];
+}
+
+// just redraw the search/replace list
+// and select the entry "$select" (usually 0 = first entry)
+global proc PRredrawSearchReplaceList( int $select)
+{
+global string $PRobjects[];
+global string $PRmaxIterUI;
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+
+	textScrollList -e -ra $PRlistSubsUI;
+	for ( $i=0 ; $i<size($PRsearch) ; $i++ ) {
+		if (size($PRreplace[$i])) textScrollList -e -a ($PRsearch[$i] + "    ---->    " + $PRreplace[$i]) $PRlistSubsUI;
+		else  textScrollList -e -a ($PRsearch[$i]) $PRlistSubsUI;
+	}
+	int $totalItems = `textScrollList -q -numberOfItems $PRlistSubsUI`;
+	if ($totalItems) textScrollList -e -selectIndexedItem (min($totalItems, ($select+1))) $PRlistSubsUI;
+}
+
+
+// the update function is called in many cases:
+// - the user hits enter in an input field
+// - checks or unchecks a display option
+// - removes something from the search/replace list
+//
+// this function checks if there is something in the input fields and includes it in the update
+global proc patternRenameUpdate()
+{
+global string $PRobjects[];
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistResultsUI;
+global string $PRdisplaySet;	// the checkBoxGrp for Display Settings
+global int $PRdisplayPath;		// status of the "path"
+global int $PRdisplayNS;		// status of the "Namespaces"
+global int $PRdisplayVerbose;
+
+global string $PRmaxIterUI;
+global string $PRprefixUI;
+
+	int $maxIter = `intFieldGrp -q -v1 $PRmaxIterUI`;
+	string $prefix = `textFieldGrp -q -text $PRprefixUI`;
+	$obj = $PRobjects;
+	string $newSearch = `textFieldGrp -q -text $PRsearchUI`;
+	string $newReplace = `textFieldGrp -q -text $PRreplaceUI`;
+
+	$PRdisplayPath = `checkBoxGrp -q -v1 $PRdisplaySet`;
+	$PRdisplayNS = `checkBoxGrp -q -v2 $PRdisplaySet`;
+	$PRdisplayVerbose = `checkBoxGrp -q -v3 $PRdisplaySet`;
+
+	string $orgSearch[] = $PRsearch;
+	string $orgReplace[] = $PRreplace;
+
+	// empty search string - do nothing just update
+	if ($newSearch!="" ) {
+		// ok if there are NO spaces
+		if (isValidString( $newSearch, "([^ ]*)")) {
+			// if replace is empty or valid in filenames
+			if ($newReplace=="" || isValidString( $newReplace, "([a-zA-Z0-9_])*")) { // no spaces allowed
+
+				for ( $i=0 ; $i<size($PRsearch) && $newSearch!=$PRsearch[$i] ; $i++ ) ;
+
+				$PRsearch[$i] = $newSearch;
+				$PRreplace[$i] = $newReplace;
+			} else warning -n "Update: No spaces or special characters in replace string allowed - input ignored";
+		} else warning -n "Update: Search string: no spaces allowed!";
+	}
+
+	textScrollList -e -ra $PRlistResultsUI;
+
+	if (size($obj) && (size($PRsearch) || size($prefix))) $obj = doPatternRename( $obj, $PRsearch, $PRreplace, $prefix, $maxIter);
+
+	string $path, $NS, $final;
+	for ( $i=0 ; $i<size($obj) ; $i++ ) {
+
+		$final = ($PRdisplayNS) ? ($obj[$i]) : (filterNamespaces($obj[$i]));
+		$final = ($PRdisplayPath) ? ($final) : (PRleafName($final));
+
+		textScrollList -e -a $final $PRlistResultsUI;
+
+	}
+	$PRsearch = $orgSearch;
+	$PRreplace = $orgReplace;
+
+}
+
+// removes the selected items from the list of objects to be renamed
+global proc patternRenameRemoveSelected()
+{
+global string $PRobjects[];
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+
+	int $sel[] = `textScrollList -q -selectIndexedItem $PRlistResultsUI`;
+	for ( $i=size($sel)-1 ; $i>-1 ; $i-- ) {
+		textScrollList -e -removeIndexedItem $sel[$i] $PRlistResultsUI;
+		stringArrayRemoveAtIndex( $sel[$i]-1, $PRobjects);
+	}
+	
+	patternRenameUpdate();
+}
+
+
+// keeps only the selected items in the list of objects to be renamed
+global proc patternRenameKeepSelected()
+{
+global string $PRobjects[];
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+
+	string $keepObj[];
+	int $sel[] = `textScrollList -q -selectIndexedItem $PRlistResultsUI`;
+	int $j=0;
+	for ( $i=size($sel)-1 ; $i>-1 ; $i-- ) {
+		$keepObj[$j] = $PRobjects[$sel[$i]-1];
+		$j++;
+	}
+	$PRobjects = $keepObj;
+	patternRenameSort( $PRobjects);
+	patternRenameUpdate();
+}
+
+// clears the list of patterns
+global proc patternRenameClear()
+{
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+global string $PRmaxIterUI;
+global string $PRprefixUI;
+
+	clear $PRsearch;
+	clear $PRreplace;
+	textScrollList -e -removeAll $PRlistSubsUI;
+	
+	intFieldGrp -e -v1 20 $PRmaxIterUI;
+	textFieldGrp -e -text "" $PRprefixUI;
+	textFieldGrp -e -text "" $PRsearchUI;
+	textFieldGrp -e -text "" $PRreplaceUI;
+	patternRenameUpdate();
+}
+
+// removes selected entries from pattern list
+global proc patternRenameRemove()
+{
+global string $PRobjects[];
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+
+	int $sel[] = `textScrollList -q -selectIndexedItem $PRlistSubsUI`;
+	for ( $i=size($sel)-1 ; $i>-1 ; $i-- ) {
+		textScrollList -e -removeIndexedItem $sel[$i] $PRlistSubsUI;
+		stringArrayRemoveAtIndex( $sel[$i]-1, $PRsearch);
+		stringArrayRemoveAtIndex( $sel[$i]-1, $PRreplace);
+	}
+	
+	textFieldGrp -e -text "" $PRsearchUI;
+	textFieldGrp -e -text "" $PRreplaceUI;
+	patternRenameUpdate();
+}
+
+// adds an entry to the pattern list
+// will be called when the user clicks on "Add" or hits enter when in the "Replace" text fiels
+global proc patternRenameAdd()
+{
+global string $PRobjects[];
+global string $PRsearchUI;		// UI name of the input field
+global string $PRsearch[];		// list of strings to search
+global string $PRreplaceUI;		// UI name of the input field
+global string $PRreplace[];		// list of strings to replace
+global string $PRlistSubsUI;
+global string $PRlistResultsUI;
+
+
+	string $newSearch = `textFieldGrp -q -text $PRsearchUI`;
+	string $newReplace =  `textFieldGrp -q -text $PRreplaceUI`;
+
+// sometines the function gets a call from the text field
+// both input fields would be empty - do nothing
+	if ($newSearch == "" && $newReplace == "") return;
+
+	if ( $newReplace=="" || isValidString( $newReplace, "([a-zA-Z0-9_])*")) { // no spaces allowed
+		if ($newSearch == "") {
+			warning -n "Add: Search string must not be empty!";
+			return;
+		}
+		if (!isValidString( $newSearch, "([^ ]*)")) {
+			warning -n "Add: Search string: no spaces allowed!";
+			return;
+		}
+
+// find this search string in the list - then the entry would be replaced - otherwise append
+		for ( $i=0 ; $i<size($PRsearch) && $newSearch!=$PRsearch[$i] ; $i++ ) ;
+
+		$PRsearch[$i] = $newSearch;
+		$PRreplace[$i] = $newReplace;
+		textFieldGrp -e -text "" $PRsearchUI;
+		textFieldGrp -e -text "" $PRreplaceUI;
+
+		PRredrawSearchReplaceList( $i);
+		patternRenameUpdate();
+	} else warning -n "Add: Replace string: no spaces or special characters allowed - nothing added!";
+}
+
+// loads the selected objcts into the list
+global proc patternRenameLoadSelected( string $objects[])
+{
+	$objects = `ls -sl -l`;
+	patternRenameSort( $objects);
+}
+
+// this functions sorts all objects so that
+// long paths ("goup1|group2|group3|child4|childShape4") are to be renamed before their parents
+global proc patternRenameSort( string $objects[])
+{
+	// now sort $objects by the number of path deviders "|"
+	// we need to rename the children first to avoid renaming a parent and then the children no longer exist
+	// to rename children we do "rename parent1|parent2|parent3|child childXYZ"
+	int $i = -1;
+	int $anz = size($objects);
+	string $dump[];
+	while (++$i < $anz) {
+	    //print("$i=" + $i + "\n");
+		while ((tokenize($objects[$i], "|", $dump)) < (tokenize($objects[$i+1], "|", $dump))) {
+		    //print("Swapping " + $i + " <> " + ($i+1) + "\n");
+			string $tmp = $objects[$i]; $objects[$i] = $objects[$i+1]; $objects[$i+1] = $tmp;
+			if ($i>0) $i--;
+		}
+	}
+}
+
+// load selected objects - the "Reload" button calls this
+global proc patternRenameReload()
+{
+global string $PRobjects[];
+
+	patternRenameLoadSelected( $PRobjects);
+ 	patternRenameUpdate();
+}
+		
+global proc patternRenameGo()
+{
+global string $PRobjects[];
+global string $PRsearch[];		// list of strings to search
+global string $PRreplace[];		// list of strings to replace
+
+global string $PRmaxIterUI;
+global string $PRprefixUI;
+
+global int $PRdisplayVerbose;		// status of the "Verbose"
+
+	int $maxIter = `intFieldGrp -q -v1 $PRmaxIterUI`;
+	string $prefix = `textFieldGrp -q -text $PRprefixUI`;
+	$obj = $PRobjects;
+	$obj = doPatternRename( $obj, $PRsearch, $PRreplace, $prefix, $maxIter);
+	for ( $i=0 ; $i<size($PRobjects) ; $i++ ) {
+		catch( `rename ($PRobjects[$i]) (PRleafName($obj[$i]))`);
+		if ($PRdisplayVerbose) print( "rename " + ($PRobjects[$i]) + " --> " + (PRleafName($obj[$i])) + "\n");
+
+	}
+	clear $PRobjects;
+	PRredrawSearchReplaceList( $i);
+	patternRenameUpdate();
+}
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	

@@ -1,0 +1,35 @@
+
+// select two layers in the display layer editor
+// this script will set a global variable with these two names
+
+global proc bt_compareSelectedDisplayLayers()
+{
+    
+global string $cmToolsLayerToToggle[];
+string $layers[] = getLayerSelection("");
+
+if (size($layers) != 2) 
+    error "Select two layers from the Layer Editor and try again";
+else
+    $cmToolsLayerToToggle = $layers;
+
+if (size($cmToolsLayerToToggle) == 2) 
+    {
+    $a = `getAttr ($cmToolsLayerToToggle[0] + ".visibility")`;
+    $b = `getAttr ($cmToolsLayerToToggle[1] + ".visibility")`;
+    if ($a == $b) 
+        $a = (1-$b);
+    setAttr ($cmToolsLayerToToggle[0] + ".visibility") $b;
+    setAttr ($cmToolsLayerToToggle[1] + ".visibility") $a;
+    
+    // Do this to force UI update
+    layerEditorLayerButtonVisibilityChange $cmToolsLayerToToggle[0];
+    layerEditorLayerButtonVisibilityChange $cmToolsLayerToToggle[0];
+    layerEditorLayerButtonVisibilityChange $cmToolsLayerToToggle[1];
+    layerEditorLayerButtonVisibilityChange $cmToolsLayerToToggle[1];
+    } 
+
+else 
+    warning "Nothing done";
+
+}

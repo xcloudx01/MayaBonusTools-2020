@@ -1,0 +1,38 @@
+// Script to remove mental ray data from Maya scene files
+// Run this script while the scene is open in Maya, then save the file with a new name
+
+global proc bt_mentalRayCleaner()
+{
+    print("\n");
+    print("\n");
+    
+    $answer = `confirmDialog -title "Confirm" -message "This will delete all Mental Ray related nodes from the current scene.\n\nAre you sure you want to continue?" -button "Yes" -button "No" -defaultButton "Yes" -cancelButton "No" -dismissString "No"`;
+    	    
+    if ($answer == "No")
+        print "\nCancelled.  No nodes deleted\n";
+    else
+        {        
+        print("Scanning scene for Mayatomr nodes...\n\n");
+        string $mrNodes[] = `ls -typ "unknown"`;
+        
+        $count = 0;
+        for ($each in $mrNodes){
+            if (`objExists $each` && `unknownNode -q -p $each` == "Mayatomr"){
+        	print("Deleting Mayatomr node: " + $each + "\n");
+            delete $each;
+            $count ++;
+            }
+        }
+        
+        
+        if (`objExists mentalrayIblShape1`){
+            delete mentalrayIblShape1;
+            }
+        
+        //unknownPlugin -remove "Mayatomr";
+        print "\n";
+        print ("Deleted " + $count + " Mayatomr nodes\n");
+        }
+}
+
+//bt_mentalRayCleaner;

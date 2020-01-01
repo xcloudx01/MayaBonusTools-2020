@@ -1,0 +1,161 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_frameOrtho()
+{
+    $selected = `ls -sl -type "transform"`;
+    
+    if (`size $selected` > 0)
+        inViewMessage -smg "Framing for selected objects." -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 1500;
+    else
+        inViewMessage -smg "Framing to origin." -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 1500;
+    
+ 	$currentPanel = `getPanel -withFocus`;
+	$cam = `modelPanel -q -camera $currentPanel`;
+    //tumbleCtx -e -orthoLock false tumbleContext;
+    //tumbleCtx -e -autoOrthoConstrain false tumbleContext;
+    viewLookAt $cam;
+    
+}
+
+
+global proc bt_lockOrtho()
+{
+    
+    tumbleCtx -e -orthoLock true tumbleContext;
+    tumbleCtx -e -autoOrthoConstrain true tumbleContext;            
+    inViewMessage -smg "Tumbling locked for all orthographic views" -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 1500;
+
+    
+}
+
+ 
+global proc bt_unlockOrtho()
+{  
+    tumbleCtx -e -orthoLock false tumbleContext;
+    tumbleCtx -e -autoOrthoConstrain false tumbleContext;
+    inViewMessage -smg "Tumbling unlocked for all orthographic views" -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 1500;
+}
+ 
+ 
+ 
+global proc bt_resetOrtho()
+{
+ 	$currentPanel = `getPanel -withFocus`;
+	$cam = `modelPanel -q -camera $currentPanel`;
+	$camShape = `listRelatives -shapes $cam`;
+
+
+    $camType = `getAttr ($cam+".orthographic")`;
+    if ($camType == 1)
+        {
+        setAttr ($cam+".orthographic") 0;
+        setAttr ($cam+".rotateX") 0;
+        setAttr ($cam+".rotateY") 0;
+        setAttr ($cam+".rotateZ") 0;
+        setAttr ($cam+".orthographic") 1;
+        viewLookAt $cam;
+        inViewMessage -smg ("Camera \"" + $cam + "\" reset to flat orthographic view") -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 2000;
+        }
+    else
+        inViewMessage -smg "Active camera is not orthographic" -pos midCenter -bkc 0x11111111 -alpha .2 -fade -fst 1500;
+
+}   
+
+
+global proc bt_killOrthoControlHUD(){
+
+	if (`headsUpDisplay -exists HUD_OrthoControlLabel`) headsUpDisplay -remove HUD_OrthoControlLabel;
+	if (`headsUpDisplay -exists HUD_OrthoControlButton0`) headsUpDisplay -remove HUD_OrthoControlButton0;
+	if (`headsUpDisplay -exists HUD_OrthoControlButton1`) headsUpDisplay -remove HUD_OrthoControlButton1;
+	if (`headsUpDisplay -exists HUD_OrthoControlButton2`) headsUpDisplay -remove HUD_OrthoControlButton2;
+	if (`headsUpDisplay -exists HUD_OrthoControlButton3`) headsUpDisplay -remove HUD_OrthoControlButton3;
+	if (`headsUpDisplay -exists HUD_OrthoControlButton4`) headsUpDisplay -remove HUD_OrthoControlButton4;
+}
+
+
+global proc bt_orthoControlHUD()
+	
+{
+    //clear selection and switch to vert selection mode
+    select -cl;
+    //SelectVertexMask;
+
+
+    //kill HUDs if they exist
+    bt_killOrthoControlHUD;
+		
+	headsUpDisplay -rp 2 1;
+	headsUpDisplay -s 2
+		  -b 1
+		  -lfs "large"
+		  -vis 1
+		  -l "               Orthographic Control"
+		  HUD_OrthoControlLabel;
+
+		
+	headsUpDisplay -rp 2 2;
+	hudButton -s 2
+		  -b 2
+		  -vis 1
+            -l "Lock"
+		  -ba       "center"
+		  -bw 100
+		  -bsh "roundRectangle"
+		  -rc "bt_lockOrtho"
+		  HUD_OrthoControlButton0;
+		
+
+	headsUpDisplay -rp 2 3;
+	hudButton -s 2
+		  -b 3
+		  -vis 1
+            -l "Unlock"
+		  -ba       "center"
+		  -bw 100
+		  -bsh "roundRectangle"
+		  -rc "bt_unlockOrtho;"
+		  HUD_OrthoControlButton1;
+
+		  
+	headsUpDisplay -rp 2 4;
+	hudButton -s 2
+		  -b 4
+		  -vis 1
+            -l "Frame"
+		  -ba       "center"
+		  -bw 100
+		  -bsh "roundRectangle"
+		  -rc "bt_frameOrtho"
+		  HUD_OrthoControlButton2;
+
+
+	headsUpDisplay -rp 2 5;
+	hudButton -s 2
+		  -b 5
+		  -vis 1
+            -l "Reset"
+		  -ba       "center"
+		  -bw 100
+		  -bsh "roundRectangle"
+		  -rc "bt_resetOrtho"
+		  HUD_OrthoControlButton3;
+
+
+
+	headsUpDisplay -rp 7 6;
+	hudButton -s 7
+		  -b 6
+		  -vis 1
+            -l "Close"
+		  -ba       "center"
+		  -bs "large"
+		  -lfs "large"
+		  -bw 100
+		  -bsh "rectangle"
+		  -rc "bt_killOrthoControlHUD"
+		  HUD_OrthoControlButton4;
+
+}

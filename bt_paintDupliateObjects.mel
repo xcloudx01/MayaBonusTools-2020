@@ -1,0 +1,826 @@
+
+// Maintained by:	Steven T. L. Roselle
+//
+// Updated:        ( 04/01/15 )
+
+proc bt_chkRotateHelperPlugin()
+{
+	global int $geometryAlignToSrf;
+	global string $geometryAlignChkBoxGrp;
+
+	if ( $geometryAlignToSrf && !`pluginInfo -q -loaded rotateHelper.so` ) {
+		if ( catch( `loadPlugin rotateHelper.so` ) ) {
+			warning (uiRes("m_simpleGeometryPaint.kPlugInWarning"));
+			$geometryAlignToSrf = 0;
+
+			// disable Align option
+			//
+			checkBoxGrp -e -en3 0 -v3 0 $geometryAlignChkBoxGrp;
+		}
+	}
+}
+
+
+global proc bt_paintDupliateObjectsAlignToSrfCB( int $align )
+{
+	global int $bt_paintDuplicateAlignToSrf;
+	global string $bt_paintDuplicateAlignChkBoxGrp;
+	
+	$bt_paintDuplicateAlignToSrf = $align;
+	bt_chkRotateHelperPlugin;
+
+	if ( $bt_paintDuplicateAlignToSrf && !`pluginInfo -q -loaded rotateHelper.so` ) {
+		if ( catch( `loadPlugin rotateHelper.so` ) ) {
+			warning (uiRes("m_paintDupliateObjects.kPlugInWarning"));
+			$bt_paintDuplicateAlignToSrf = 0;
+
+			// disable Align option
+			//
+			checkBoxGrp -e -en3 0 -v3 0 $bt_paintDuplicateAlignChkBoxGrp;
+		}
+	}
+}
+
+
+
+
+global proc bt_getObjectsForPaint()
+{
+	global string $bt_paintDuplicateGeom[];
+	global string $bt_paintDuplicateSourceName;
+	
+	$selected = `ls -sl`;
+	if (`size $selected` != 2)
+	    {
+	    inViewMessage -smg "Nothing to paint with.  Select source object first, then target object second and try again." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+	    error "Nothing to paint with.  Select source object first, then target object second and try again.";
+	    }
+
+	$bt_paintDuplicateGeom[0] = $selected[0];
+	$bt_paintDuplicateSourceName = $selected[0];
+	select -r $selected[1];
+	
+}	  
+
+
+
+global proc int bt_checkForValidGeometry()
+{
+	global string $bt_paintDuplicateGeom[];
+	global string $bt_paintDuplicateValidGeom[];
+
+	int $numGeom = size($bt_paintDuplicateGeom);
+	int $g, $fg;
+
+	clear($bt_paintDuplicateValidGeom);
+	for( $g = 0, $fg = 0; $g < $numGeom; $g++ ) {
+		// check if geometry exists
+		//
+		if ( `objExists $bt_paintDuplicateGeom[$g]` ) {
+			$bt_paintDuplicateValidGeom[$fg] = $bt_paintDuplicateGeom[$g];
+			$fg++;
+		}
+	}
+	return $fg;
+}
+
+
+// This is the "Initialize Cmd". This procedure is called once
+// for every selected surface when an intial click is received
+// on any surface. The argument is the name of the surface. This
+// procedure returns a string which indicates to the scriptable
+// tool how to behave for the duration of the stroke. 
+//
+global proc string bt_initPaintDupliateObjects( string $name )
+{
+	global string $bt_paintDuplicateNamePrefix[];
+	global string $bt_paintDuplicateParentName[];
+	global string $bt_paintDuplicateSourceName;
+	global int $bt_paintDuplicateType[];
+	global int $paintDupliateObjectsFreeSlot;
+	global int $paintDupliateObjectsSlots;
+	global int $bt_paintDuplicateUseGrid;
+	global int $bt_paintDuplicateGridSizeU;
+	global int $bt_paintDuplicateGridSizeV;
+	global int $bt_paintDuplicateJitterGrid;
+	global int $bt_paintDuplicateAttachToSrf;
+	global int $bt_paintDuplicateAlignToSrf;
+	global int $bt_paintDuplicateOperation;
+	global string $bt_paintDuplicateIdentifier;
+
+	if ( bt_checkForValidGeometry() == 0 ) {
+		// return enough to make sure the set method gets
+		// called correctly
+		//
+		warning "No valid geometry to paint.";
+		return "-uv surface -position local -normal world";
+	}
+
+	// find a free slot for this surface in the global arrays
+	//
+	int $slot;
+
+	for ( $slot = $paintDupliateObjectsFreeSlot; $slot < $paintDupliateObjectsSlots; $slot++ ) {
+		if ( $bt_paintDuplicateNamePrefix[$slot] == "" ) {
+			break;
+		}
+	}  
+
+	if ( $slot == $paintDupliateObjectsSlots ) {
+		$paintDupliateObjectsSlots++;
+		$paintDupliateObjectsFreeSlot = $paintDupliateObjectsSlots;
+	}
+
+	int		$paintableObject = 1;
+
+	if ( `nodeType $name` == "nurbsSurface" ) {
+		$bt_paintDuplicateType[$slot] = 0;
+	} else if ( `nodeType $name` == "mesh" ) {
+		$bt_paintDuplicateType[$slot] = 1;
+	} else if ( `nodeType $name` == "subdiv" ) {
+		$bt_paintDuplicateType[$slot] = 2;
+	} else {
+		$paintableObject = 0;
+	}
+
+	if ( $paintableObject ) {
+		// save the name of the parent of this shape as well
+		// as a prefix to use when creating the geometrys and
+		// and a group name if $bt_paintDuplicateGroup is true
+		//
+		string $parent[] = `listRelatives -p $name`;
+		$bt_paintDuplicateParentName[$slot] = $parent[0];
+		$bt_paintDuplicateNamePrefix[$slot] = $bt_paintDuplicateSourceName + $bt_paintDuplicateIdentifier;
+
+
+		if ( $bt_paintDuplicateAlignToSrf ) {
+			// check if we have rotateHelper plugin
+			// - this may change $bt_paintDuplicateAlignToSrf flag
+			//
+			bt_chkRotateHelperPlugin;
+
+			// if geometry alignment is desired but geometry attachment isn't, create
+			// some dependency nodes to help out with this and create the constant
+			// connections
+			// - at the current time only NURBS surfaces can be attached to
+			//
+			if ( $bt_paintDuplicateAlignToSrf
+			  && ( ! $bt_paintDuplicateAttachToSrf || $bt_paintDuplicateType[$slot] != 0 ) ) {
+				int $created = 0;
+	
+				if ( ! `objExists paintDupliateObjectsPOSNode` ) {
+					createNode pointOnSurfaceInfo -name paintDupliateObjectsPOSNode;
+					$created = 1;
+				}
+				if ( ! `objExists paintDupliateObjectsBRNode` ) {
+					createNode rotateHelper -name paintDupliateObjectsBRNode;
+					$created = 1;
+				}
+				if ( ! `objExists paintDupliateObjectsMeshBRNode` ) {
+					createNode rotateHelper -name paintDupliateObjectsMeshBRNode;
+					$created = 1;
+				}
+				if ( ! `objExists paintDupliateObjectsSubdBRNode` ) {
+					createNode rotateHelper -name paintDupliateObjectsSubdBRNode;
+					$created = 1;
+				}
+				if ( $created ) {
+					connectAttr paintDupliateObjectsPOSNode.normal paintDupliateObjectsBRNode.up;
+					connectAttr paintDupliateObjectsPOSNode.tangentU paintDupliateObjectsBRNode.forward;
+				}
+			}
+		}
+	}
+
+	// Return an argument string which:
+	// - tells the tool what surface ID to use for this surface
+	// - indicate that the associated surface parameter location
+	//   should also be passed to the "Set Value Cmd".
+	//
+	string $jitter;
+	string $position;
+	string $grid;
+
+	if ( $bt_paintDuplicateJitterGrid ) {
+		$jitter = "true";
+	} else { 
+		$jitter = "false";
+	}
+
+	$position = "world";
+
+	if ( $bt_paintDuplicateUseGrid ) {
+		$grid = (" -grid " + $bt_paintDuplicateGridSizeU  + " " + $bt_paintDuplicateGridSizeV);
+	} else {
+		$grid = "";
+	}
+	return ( "-id " + $slot
+		   + $grid
+		   + " -jitter " + $jitter
+		   + " -uv surface"
+		   + " -position " + $position
+		   + " -normal " + $position );
+}
+
+// This is the "Finalize Cmd". This procedure is called at the
+// end of the stroke. It is passed the surface ID, that was
+// generated by the "Initialize Cmd".
+//
+global proc bt_finishPaintDupliateObjects( int $slot )
+{
+	global string $bt_paintDuplicateNamePrefix[];
+	global int $paintDupliateObjectsFreeSlot;
+
+	// clear out the slot that was used for this surface
+	//
+	if ( $slot >= 0 ) {
+		$bt_paintDuplicateNamePrefix[$slot] = "";
+		if ( $slot < $paintDupliateObjectsFreeSlot ) {
+			$paintDupliateObjectsFreeSlot = $slot;
+		}
+	}
+}
+
+proc string bt_getRandomGeometry()
+{
+	global string $bt_paintDuplicateValidGeom[];
+
+	int $index = trunc( rand( size($bt_paintDuplicateValidGeom) - 0.5 ) );
+	return $bt_paintDuplicateValidGeom[$index];
+}
+
+proc bt_setDuplicateGeoAttributes(string $objname, float $val)
+{
+	global int $bt_paintDuplicateModifyAttr[];
+	global float $bt_paintDuplicateModifyAttrNorm[];
+	global string $bt_paintDuplicateAttrName[];
+	global int $bt_paintDuplicateModifyAttrWrap[];
+	global int $bt_paintDuplicateProportional;
+	global float $bt_paintDuplicateJitterValueAmt;
+	global int $bt_paintDuplicateGroup;
+
+	int $attr;
+	int $numAttr = size($bt_paintDuplicateModifyAttr);
+	float $normVal;
+	float $randVal;
+
+	if ( $bt_paintDuplicateJitterValueAmt > 0 ) {
+		float $jitterRange = abs( $val ) * $bt_paintDuplicateJitterValueAmt;
+
+		$val = rand( $val - $jitterRange, $val + $jitterRange );
+	}
+
+	// replace all modifiable attributes with normalized value
+	//
+	//for ( $attr = 0; $attr < $numAttr; $attr++ ) {
+	for ( $attr = 6; $attr < 9; $attr++ ) {
+		if ( $bt_paintDuplicateModifyAttr[$attr] ) {
+			if ( $bt_paintDuplicateModifyAttrNorm[$attr] != 1 ) {
+				$normVal = $val * $bt_paintDuplicateModifyAttrNorm[$attr];
+			} else {
+				$normVal = $val;
+			}
+
+			// print ($objname + $bt_paintDuplicateAttrName[$attr] + " set to " + $normVal + "\n");
+			setAttr ($objname + $bt_paintDuplicateAttrName[$attr]) $normVal;
+		}
+	
+	
+	//print $bt_paintDuplicateModifyAttr;
+		
+	// NEW Random scale	
+
+    $randScaleVal = `rand 0.5 1.5`;
+
+	if ($bt_paintDuplicateModifyAttr[0] == 1)      
+		setAttr ($objname + $bt_paintDuplicateAttrName[0]) $randScaleVal;
+	if ($bt_paintDuplicateModifyAttr[1] == 1)      
+		setAttr ($objname + $bt_paintDuplicateAttrName[1]) $randScaleVal;		
+	if ($bt_paintDuplicateModifyAttr[2] == 1)      
+		setAttr ($objname + $bt_paintDuplicateAttrName[2]) $randScaleVal;
+
+	// NEW Random scale	
+
+	if ($bt_paintDuplicateModifyAttr[3] == 1)   
+	    {    
+	    $randVal = `rand 1 360`;
+	    rotate -r -os -fo $randVal 0 0 $objname ;
+		//setAttr ($objname + $bt_paintDuplicateAttrName[$attr]) $randVal;
+	    }
+	if ($bt_paintDuplicateModifyAttr[4] == 1)   
+	    {    
+	    $randVal = `rand 1 360`;
+	    rotate -r -os -fo 0 $randVal 0 $objname ;
+		//setAttr ($objname + $bt_paintDuplicateAttrName[$attr]) $randVal;
+	    }		
+	if ($bt_paintDuplicateModifyAttr[5] == 1)   
+	    {    
+	    $randVal = `rand 1 360`;
+	    rotate -r -os -fo 0 0 $randVal $objname ;
+		//setAttr ($objname + $bt_paintDuplicateAttrName[$attr]) $randVal;
+	    }
+
+
+   
+
+	}
+}
+
+
+// This is the "Set Value Cmd". It is called everytime a value
+// on the surface is changed. A surface ID, a grid index
+// on the surface and the value associated with that grid index
+// is passed. There can be additional arguments depending on the
+// options generated by the return value of the "Initialize Cmd".
+// In this case the (u,v) surface parameter position for this
+// grid point as well as its local position is passed.
+// 
+global proc bt_setPaintDupliateObjectsValue(
+	int $slot,
+	int $index,
+	float $val,
+	float $u,
+	float $v,
+	float $x,
+	float $y,
+	float $z,
+	float $nx,
+	float $ny,
+	float $nz
+)
+{
+	global string $bt_paintDuplicateNamePrefix[];
+	global string $bt_paintDuplicateParentName[];
+	global int $bt_paintDuplicateType[];
+	global int $bt_paintDuplicateAttachToSrf;
+	global int $bt_paintDuplicateAlignToSrf;
+	global int $bt_paintDuplicateInstance;
+	global int $bt_paintDuplicateOperation;
+	global int $bt_paintDuplicateGroup;
+	global string $bt_paintDuplicateGeom[];
+
+	if ( $slot < 0 ) {
+		return;
+	}
+
+	if ( $bt_paintDuplicateNamePrefix[$slot] != "" ) {
+		// determine the name of the geometry associated with this
+		// grid location as well as the name of the
+		// pointOnSurfaceInfo node that attaches the geometry to
+		// the surface
+		//
+		string $objname = $bt_paintDuplicateNamePrefix[$slot] + $index;
+		string $srfpoint = ($objname + "Loc");
+		string $alignGeom = ($objname + "Align");
+		string $posname = ($objname + "Pos");
+
+		if ( `objExists $objname` ) {
+			// the geometry already exists
+			//
+			if (`getModifiers` == 4) {
+			//if ( $bt_paintDuplicateOperation == 3 ) {
+				// we are removing geometry; only remove if val > 0
+				//
+				if ( $val > 0 ) {
+					if ( `objExists $posname` ) {
+						delete $posname;
+					} else {
+						delete $objname;
+					}
+					if ( `objExists $srfpoint` ) {
+						delete $srfpoint;
+					}
+					if ( `objExists $alignGeom` ) {
+						delete $alignGeom;
+					}
+
+
+				}
+			} else if (`getModifiers` == 1){
+				// modify geometry attributes
+				//
+				if ( `objExists $objname` ) 
+				    bt_setDuplicateGeoAttributes( $objname, $val );
+
+			}
+		} else if ( $val > 0 && $bt_paintDuplicateOperation == 1 && (`getModifiers` != 4) && (`getModifiers` != 1)) {       			
+
+			// the geometry doesn't exist
+			//
+			string $sname[];
+			string $geom = bt_getRandomGeometry();
+
+			// create a geometry with the proper name, scale it by
+			// the passed value
+			//
+			if ( $bt_paintDuplicateInstance != 1) {
+				$sname=`duplicate -n $objname $geom`;
+			} else {
+				$sname=`instance -n $objname $geom`;
+			}
+			if ( $sname[0] != $objname ) {
+				string $bt_paintDuplicateNameError = "NameError";
+				error (`format -s $objname -s $sname[0] $bt_paintDuplicateNameError`);
+				return;
+			}
+			showHidden $objname;
+			
+			
+			if ($bt_paintDuplicateGroup)
+			    if (`objExists ($bt_paintDuplicateGeom[0]+"_Painted_Group")`)
+			        parent $objname ($bt_paintDuplicateGeom[0]+"_Painted_Group");
+			    else {
+                    group -em -name ($bt_paintDuplicateGeom[0]+"_Painted_Group");
+                    parent $objname ($bt_paintDuplicateGeom[0]+"_Painted_Group");
+                    }    
+
+			$posname = $objname;
+
+			
+			bt_setDuplicateGeoAttributes( $objname, $val );
+
+			string $outSrfAttr;
+
+
+			$outSrfAttr = ".worldSpace";
+
+
+			// attach only works on NURBS surfaces right now
+			//
+			if ( $bt_paintDuplicateAttachToSrf && $bt_paintDuplicateType[$slot] == 0 ) {
+				// create point on surface node which will be used to
+				// attach the geometry to the surface
+				//
+				createNode pointOnSurfaceInfo -n $srfpoint;
+				setAttr ($srfpoint + ".u") $u;
+				setAttr ($srfpoint + ".v") $v;
+				connectAttr ($bt_paintDuplicateParentName[$slot] + $outSrfAttr) ($srfpoint + ".is");
+				connectAttr ($srfpoint + ".position") ($posname + ".translate");
+
+				if ( $bt_paintDuplicateAlignToSrf ) {
+					createNode rotateHelper -n $alignGeom;
+
+					connectAttr ($srfpoint + ".normal") ($alignGeom + ".up");
+					connectAttr ($srfpoint + ".tangentU") ($alignGeom + ".forward");
+					connectAttr ($alignGeom + ".rotate") ($posname + ".rotate");				
+				}
+			} else {
+
+				move -ws $x $y $z $posname;
+
+				if ( $bt_paintDuplicateAlignToSrf ) {
+					string	$helperNode;
+					string	$outSrf;
+
+					switch ( $bt_paintDuplicateType[$slot] ) {
+					case 0:	// NURBS surface
+						// use global nodes to calculate required rotation
+						//
+						$outSrf = ($bt_paintDuplicateParentName[$slot] + $outSrfAttr);
+						connectAttr $outSrf paintDupliateObjectsPOSNode.is;
+						setAttr paintDupliateObjectsPOSNode.u $u;
+						setAttr paintDupliateObjectsPOSNode.v $v;
+						$helperNode = "paintDupliateObjectsBRNode";
+						break;
+					case 1:	// poly mesh
+						setAttr paintDupliateObjectsMeshBRNode.upX $nx;
+						setAttr paintDupliateObjectsMeshBRNode.upY $ny;
+						setAttr paintDupliateObjectsMeshBRNode.upZ $nz;
+						$helperNode = "paintDupliateObjectsMeshBRNode";
+						break;
+					case 2:	// subd
+						setAttr paintDupliateObjectsSubdBRNode.upX $nx;
+						setAttr paintDupliateObjectsSubdBRNode.upY $ny;
+						setAttr paintDupliateObjectsSubdBRNode.upZ $nz;
+						$helperNode = "paintDupliateObjectsSubdBRNode";
+						break;
+					}
+
+
+					// set rotation of object 
+					// - rotateHelper plugin has a bug where it doesn't recompute
+					//   unless asked for rotate attribute
+					//
+					getAttr ($helperNode + ".rotate");
+					rotate `getAttr ($helperNode + ".rx")`
+						   `getAttr ($helperNode + ".ry")`
+						   `getAttr ($helperNode + ".rz")` $posname;
+
+					switch ( $bt_paintDuplicateType[$slot] ) {
+					case 0:	// NURBS surface
+						// disconnect the surface
+						//
+						disconnectAttr $outSrf paintDupliateObjectsPOSNode.is;
+						break;
+					case 1:	// poly mesh
+						break;
+					case 2:	// subd
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+// This is the "Get Value Cmd". It is called everytime a value
+// on the surface is needed by the scriptable paint tool. A
+// surface ID and a grid index is passed in. This procedure should
+// return the value for this grid location on the specified surface.
+// 
+global proc float bt_getTargetGeoValue( int $slot, int $index )
+{
+	global string $bt_paintDuplicateNamePrefix[];
+	global int $bt_paintDuplicateModifyAttr[];
+	global int $bt_paintDuplicateModifyAttrWrap[];
+	global float $bt_paintDuplicateModifyAttrNorm[];
+	global string $bt_paintDuplicateAttrName[];
+	global int $bt_paintDuplicateOperation;
+	global int $bt_paintDuplicateProportional;
+
+	if ( $slot >= 0 && $bt_paintDuplicateNamePrefix[$slot] != "" ) {
+		// if this slot is valid, generate the name for the
+		// geometry at this grid index
+		//
+		string $objname = $bt_paintDuplicateNamePrefix[$slot] + $index;
+
+		if ( `objExists $objname` ) {
+			if (`getModifiers` == 4) {
+			//if ( $bt_paintDuplicateOperation == 3 ) {
+				// we are removing geometry
+				//
+				return 0.0;
+			} else {
+				float $total = 0;
+				int $num = 0;
+				int $attr;
+				int $numAttr = size($bt_paintDuplicateModifyAttr);
+				float $val;
+	
+				// get the sum of normalized attributes
+				//
+				for ( $attr = 0; $attr < $numAttr; $attr++ ) {
+					if ( $bt_paintDuplicateModifyAttr[$attr] ) {
+						$val = `getAttr ($objname + $bt_paintDuplicateAttrName[$attr])`;
+						
+						// print ("getAttr " + $objname + $bt_paintDuplicateAttrName[$attr] + " = " + $val);
+						if ( $bt_paintDuplicateModifyAttrNorm[$attr] != 1 ) {
+							$val /= $bt_paintDuplicateModifyAttrNorm[$attr];
+						}
+						if ( $bt_paintDuplicateModifyAttrWrap[$attr] ) {
+							$val = fmod( $val, 1.0 );
+						}
+						// print (" normalized = " + $val + "\n");
+						if ( $bt_paintDuplicateProportional ) {
+							$val = abs( $val );
+						}
+						$total += $val;
+						$num++;
+					}
+				}
+				if ( $num > 0 ) {
+					if ( $bt_paintDuplicateProportional ) {
+						return $total;
+					} else {
+						return $total / $num;
+					}
+				} else {
+					return 0.0;
+				}
+			}
+		} else {
+			// the geometry doesn't exist, therefore return 0 as
+			// the value for this grid location
+			//
+			return 0.0;
+		}
+	} else {
+		return 0.0;
+	}
+}
+
+
+global proc bt_finishPaintDupliateObjects( int $slot )
+{
+	global string $bt_paintDuplicateNamePrefix[];
+	global int $bt_paintDuplicatePaintFreeSlot;
+
+	// clear out the slot that was used for this surface
+	//
+	if ( $slot >= 0 ) {
+		$bt_paintDuplicateNamePrefix[$slot] = "";
+		if ( $slot < $bt_paintDuplicatePaintFreeSlot ) {
+			$bt_paintDuplicatePaintFreeSlot = $slot;
+		}
+	}
+}
+
+// This is the "Tool Cleanup Cmd". It is called when the tool is
+// exited. In this case, the special dialog window that was created
+// is deleted
+//
+global proc bt_cleanupPaintDupliateObjects( string $context )
+{
+	if ( `window -ex paintDupliateObjectsWindow` ) {
+		deleteUI paintDupliateObjectsWindow;
+	}
+}
+
+proc bt_paintDupliateObjectsUI( string $context ) 
+{
+	global int $bt_paintDuplicateOperation;
+	global int $bt_paintDuplicateUseGrid;
+	global int $bt_paintDuplicateGridSizeU;
+	global int $bt_paintDuplicateGridSizeV;
+	global string $bt_paintDuplicateGridSizeUSlider;
+	global string $bt_paintDuplicateGridSizeVSlider;
+	global string $bt_paintDuplicateAlignChkBoxGrp;
+	global int $bt_paintDuplicateJitterGrid;
+	global int $bt_paintDuplicateAttachToSrf;
+	global int $bt_paintDuplicateAlignToSrf;
+	global int $bt_paintDuplicateInstance;
+	global int $bt_paintDuplicateProportional;
+	global string $bt_paintDuplicateGeom[];
+	global int $bt_paintDuplicateModifyAttr[];
+	global float $bt_paintDuplicateJitterValueAmt;
+	global string $bt_paintDuplicateIdentifier;
+	global int $bt_paintDuplicateGroup;
+
+	if ( `window -ex paintDupliateObjectsWindow` )
+	{
+		showWindow paintDupliateObjectsWindow ;
+		return ;
+	}
+	
+	setUITemplate -pushTemplate DefaultTemplate;
+	window -title "Paint Duplicate Objects"  paintDupliateObjectsWindow;
+	columnLayout -adj false -cal left
+		column;
+
+			string $geom;
+			int $numGeoms = size($bt_paintDuplicateGeom);
+			int $g;
+			for ( $g = 0; $g < $numGeoms; $g++ ) {
+				$geom = ($geom + " " + $bt_paintDuplicateGeom[$g]);
+			}
+			textFieldGrp -label "Source Object: " 
+						 -text $geom
+						 -ed 0
+						 //-cc "tokenize( \"#1\", $bt_paintDuplicateGeom )"
+						 geometryName; 
+			textFieldGrp -label "Target Object: " 
+						 -text `ls -sl`
+						 -ed 0
+						 //-cc "$bt_paintDuplicateIdentifier = \"#1\""
+						 geometryIdentifier; 
+						 					 
+					 
+            if ($bt_paintDuplicateUseGrid == 0)		    
+			    radioButtonGrp -numberOfRadioButtons 2 -label "Snap Method" -labelArray2 "Vertices" "UV Space" -select 1
+			        -on1 "$bt_paintDuplicateUseGrid = 0; $bt_paintDuplicateGridSizeU = 10; $bt_paintDuplicateGridSizeV = 10;  intSliderGrp -e -en $bt_paintDuplicateUseGrid -v 10 $bt_paintDuplicateGridSizeUSlider;"  -on2 "$bt_paintDuplicateUseGrid = 1; intSliderGrp -e -en $bt_paintDuplicateUseGrid $bt_paintDuplicateGridSizeUSlider;";	
+			else    
+			    radioButtonGrp -numberOfRadioButtons 2 -label "Snap Method" -labelArray2 "Vertices" "UV Space" -select 2
+			        -on1 "$bt_paintDuplicateUseGrid = 0; $bt_paintDuplicateGridSizeU = 10; $bt_paintDuplicateGridSizeV = 10; intSliderGrp -e -en $bt_paintDuplicateUseGrid -v 10 $bt_paintDuplicateGridSizeUSlider;"  -on2 "$bt_paintDuplicateUseGrid = 1; intSliderGrp -e -en $bt_paintDuplicateUseGrid $bt_paintDuplicateGridSizeUSlider;";	
+			  
+			    			    	 
+			/*		 
+			checkBoxGrp -ncb 2 -label ""
+						-label1 "UVs: " 
+						-v1 $bt_paintDuplicateUseGrid
+						-cc1 "$bt_paintDuplicateUseGrid = #1; intSliderGrp -e -en $bt_paintDuplicateUseGrid $bt_paintDuplicateGridSizeUSlider; intSliderGrp -e -en $bt_paintDuplicateUseGrid $bt_paintDuplicateGridSizeVSlider"
+						-label2 (uiRes("m_geometryPaint.kJitterGrid")) 
+						-v2 $bt_paintDuplicateJitterGrid
+						-cc2 "$bt_paintDuplicateJitterGrid = #1"
+						useGrid;
+			*/		
+						
+			$bt_paintDuplicateGridSizeUSlider=`
+				intSliderGrp -field true -label "UV Space Divisions: "  -min 10 -max 100
+						 -v $bt_paintDuplicateGridSizeU
+						 -cc "$bt_paintDuplicateGridSizeU = #1; $bt_paintDuplicateGridSizeV = #1"
+						 -en $bt_paintDuplicateUseGrid
+						 uGrid`; 
+
+			checkBoxGrp -ncb 3 -label "Create Options: " 
+						-label1 "Instance" 
+						-v1 $bt_paintDuplicateInstance
+						-cc1 "$bt_paintDuplicateInstance = #1"
+						-label2 "Align"
+						-v2 $bt_paintDuplicateAlignToSrf
+						-cc2 "bt_paintDupliateObjectsAlignToSrfCB( #1 )"
+						-label3 "Group" 
+						-v3 $bt_paintDuplicateGroup
+						-cc3 "$bt_paintDuplicateGroup = #1"
+						options0;		
+			
+			checkBoxGrp -ncb 3 -label "Modify / Randomize: " 
+						-label1 "X Scale"  -v1 $bt_paintDuplicateModifyAttr[0]
+						-cc1 "$bt_paintDuplicateModifyAttr[0] = #1"
+						-label2 "Y Scale"  -v2 $bt_paintDuplicateModifyAttr[1]
+						-cc2 "$bt_paintDuplicateModifyAttr[1] = #1"
+						-label3 "Z Scale"  -v3 $bt_paintDuplicateModifyAttr[2]
+						-cc3 "$bt_paintDuplicateModifyAttr[2] = #1"
+						control0;
+			checkBoxGrp -ncb 3 -label ""
+						-label1 "X Rotate"  -v1 $bt_paintDuplicateModifyAttr[3]
+						-cc1 "$bt_paintDuplicateModifyAttr[3] = #1"
+						-label2 "Y Rotate"  -v2 $bt_paintDuplicateModifyAttr[4]
+						-cc2 "$bt_paintDuplicateModifyAttr[4] = #1"
+						-label3 "Z Rotate"  -v3 $bt_paintDuplicateModifyAttr[5]
+						-cc3 "$bt_paintDuplicateModifyAttr[5] = #1"
+						control1;
+
+
+
+
+		setParent ..;
+	setParent ..;
+	showWindow paintDupliateObjectsWindow;
+	setUITemplate -popTemplate;
+}
+
+
+// This procedure should be set as the "Tool Setup Cmd" in the 
+// Setup tab of the Maya Artisan Script Paint tool's tool
+// settings window. The tool context is supplied as an argument.
+//
+global proc bt_runPaintDupliateObjects( string $context )
+{
+	// initialize all the other commands in this scriptable 
+	// paint tool context.
+	// 
+	artUserPaintCtx -e 
+		-ic "bt_initPaintDupliateObjects"
+		-fc "bt_finishPaintDupliateObjects"
+		-svc "bt_setPaintDupliateObjectsValue"
+		-gvc "bt_getTargetGeoValue"
+		-gsc ""
+		-cc ""
+		-tcc "bt_cleanupPaintDupliateObjects"
+		-gac ""
+		$context;
+		
+	// create the dialog box to control various parameters
+	//
+	 bt_paintDupliateObjectsUI( $context );
+	
+	//paintDupliateObjectsSetOptions;
+
+	// We force the tool to use texture paint
+	// mode (as opposed to projection paint mode)
+	//
+	// userPaintCtx -e -painttype "forceTexture" $context;
+}
+
+
+global proc bt_paintDupliateObjects()
+{
+    
+    global string $bt_paintDuplicateNamePrefix[];
+    global string $bt_paintDuplicateParentName[];
+    global int $bt_paintDuplicateType[];		// 0 - NURBS surface, 1 - mesh, 2 - subd
+    global int $paintDupliateObjectsFreeSlot = 0;
+    global int $paintDupliateObjectsSlots = 0;
+    
+    global string $bt_paintDuplicateGeom[];
+    global string $bt_paintDuplicateValidGeom[];
+    
+    // determines which operation we are in:
+    // 1 - create/modify, 2 - modify, 3 - remove
+    //
+    global int $bt_paintDuplicateOperation = 1;
+    
+    // These are global variables used to control what will happen
+    // during painting. These globals are modified using a separate
+    // UI window created when this tool becomes active.
+    //
+    global int $bt_paintDuplicateUseGrid = 0;
+    global int $bt_paintDuplicateGridSizeU;
+    global string $bt_paintDuplicateGridSizeUSlider;
+    global int $bt_paintDuplicateGridSizeV;
+    global string $bt_paintDuplicateGridSizeVSlider;
+    global int $bt_paintDuplicateJitterGrid = 0;
+    global float $bt_paintDuplicateJitterValueAmt = 0.0;
+    global int $bt_paintDuplicateAttachToSrf = 0;
+    global int $bt_paintDuplicateAlignToSrf;
+    global int $bt_paintDuplicateInstance;
+    global int $bt_paintDuplicateProportional = 0;
+    global string $bt_paintDuplicateAttrName[] = { ".sx", ".sy", ".sz", ".rx", ".ry", ".rz", ".tx", ".ty", ".tz" };
+    global int $bt_paintDuplicateModifyAttr[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    global float $bt_paintDuplicateModifyAttrNorm[] = { 1, 1, 1, 360, 360, 360, 1, 1, 1 };
+    global int $bt_paintDuplicateModifyAttrWrap[] = { 0, 0, 0, 1, 1, 1, 0, 0, 0 };
+    global string $bt_paintDuplicateIdentifier = "_Painted";
+    global string $bt_paintDuplicateAlignChkBoxGrp;
+    
+    //Start it up...
+    bt_getObjectsForPaint;
+    
+    ScriptPaintTool; 
+    artUserPaintCtx -e -tsc "bt_runPaintDupliateObjects" `currentCtx`;
+    
+    inViewMessage -smg "Paint to place objects.  SHIFT to modify existing objects.  CTRL to delete existing objects." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+
+}
+
+
+bt_paintDupliateObjects;

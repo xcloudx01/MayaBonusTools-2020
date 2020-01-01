@@ -1,0 +1,49 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Updated:        ( 04/01/15 )
+
+global proc bt_toggleXRay()
+{
+	//Toggle Xray view for selected models for if nothing selected toggle for all panels
+
+	string $selected[] = `ls -sl`;
+	string $filtered[] = `filterExpand -sm 10 -sm 12 -sm 68 $selected`;
+	
+	
+	if (`size $filtered` ==  0)
+		{
+		//$filtered = `ls -type mesh`;
+		//print ("All Meshes and Surfaces : ");
+		error ("No meshes or surfaces selected.  Select 1 or more and try again");
+		}
+	else
+		print ("Selected Meshes and Surfaces : ");
+	
+	for ($obj in $filtered)
+		{
+			int $state = `optionVar -q LT_xRay`;
+			if ($state == 1)
+				{
+					print ($obj + "\n");
+				displaySurface -xRay 0 $obj;
+				}
+			else
+				{
+				displaySurface -xRay 1 $obj;
+				}
+		}	
+		
+	if (`optionVar -q LT_xRay` == 0)
+		{
+		optionVar -intValue LT_xRay 1;
+        inViewMessage -smg "XRay mode enabled for selected." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 2000;
+		print ("XRay mode enabled - per object.\n");
+		}
+	else
+		{
+        inViewMessage -smg "XRay mode disabled for selected." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 2000;
+		optionVar -intValue LT_xRay 0;	
+		print ("XRay mode disabled - per object.\n");
+		}
+}

@@ -1,0 +1,24 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+global proc bt_toggleGPUOverride()
+{
+	//Toggle GPU Accel mode for selected models for if nothing selected toggle for all panels	
+		
+	if (`optionVar -q gpuOverride` == 0)
+		{
+        optionVar -iv gpuOverride  1;
+        turnOnOpenCLEvaluatorActive();
+        SetEvaluationManagerHUDVisibility 1 ;
+        inViewMessage -smg "GPU acceleration enabled." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        }
+	else
+		{
+        optionVar -iv gpuOverride  0;	
+        SetEvaluationManagerHUDVisibility 1 ;
+        turnOffOpenCLEvaluatorActive();
+        inViewMessage -smg "GPU acceleration disabled." -pos midCenter -bkc 0x11111111 -alpha .5 -fade -fst 3000;
+        }
+}

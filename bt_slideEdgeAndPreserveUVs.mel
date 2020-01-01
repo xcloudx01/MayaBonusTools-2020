@@ -1,0 +1,15 @@
+
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+
+
+global proc bt_slideEdgeAndPreserveUVs () {
+	
+	bt_preserveUVs;
+	SlideEdgeTool;
+}
+
+source bt_extrudeFaceAndPreserveUVs; bt_preserveUVs; SlideEdgeTool;

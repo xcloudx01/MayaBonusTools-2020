@@ -1,0 +1,42 @@
+
+global proc bt_createLocatorAtComponentCenter()
+{
+	float $position[];
+	string $currentLocator[];
+	string $allLocators[];
+	float $center[];
+	int $c=0;
+
+	string $components[] = `filterExpand -ex 1 -fp 1 -sm 31 -sm 32 -sm 34`;
+	if (!size($components))	error "Select 1 or more verts, edges or faces";
+
+	for ($comp in $components)
+    	{
+	    $center[0] = 0;
+    	$center[1] = 0;
+    	$center[2] = 0;
+        select -r $comp;
+	    ConvertSelectionToVertices;
+        string $componentVerts[] = `filterExpand -sm 31`;
+        int $size = `size $componentVerts`;
+	
+    	for ($i = 0; $i < $size; $i++)
+    	    {
+    		$vtx_pos = `pointPosition -world $componentVerts[$i]`;
+    		$center[0] += $vtx_pos[0];
+    		$center[1] += $vtx_pos[1];
+    		$center[2] += $vtx_pos[2];
+    	    }
+        $center[0] /= $size;
+    	$center[1] /= $size;
+    	$center[2] /= $size;
+
+		$currentLocator = `spaceLocator`;
+		$allLocators[$c] = $currentLocator[0];
+		move -a $center[0] $center[1] $center[2] $allLocators[$c];
+		scale -a 0.1 0.1 0.1 $allLocators[$c];
+		$c++;
+    	}
+    print ("Created " + $c + " locators\n");
+	group -n "componentLocatorGroup" $allLocators;
+}

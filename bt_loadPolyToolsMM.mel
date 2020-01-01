@@ -1,0 +1,138 @@
+
+// Author:		Steven T. L. Roselle
+//
+// Created:        ( 04/01/15 )
+
+
+////////////////////////////
+//
+// Shift+RMB Marking Menus
+//
+////////////////////////////
+
+	
+/*
+contextPolyToolsObjectUserMM
+contextPolyToolsUVUserMM
+contextPolyToolsEdgeUserMM
+contextPolyToolsFaceUserMM
+contextPolyToolsVertexUserMM
+*/
+
+global proc contextPolyToolsObjectUserMM ( string $parent ) {
+    setParent -menu $parent;
+    menuItem -divider true;
+    menuItem  -label "BonusTools" -version "2016" -subMenu 1;
+    menuItem -divider true;
+    menuItem  -label "Mirror Instance Mesh\n" -c "bt_mirrorInstanceMesh"; 
+    menuItem  -label "Combine and Merge\n" -c "bt_mergeCombineMeshes"; 
+    menuItem  -label "Combine and Copy Last Pivot\n" -c "bt_combineCopyLastPivot"; 
+  
+    menuItem -divider true;
+    menuItem  -label "Convert N-Sided Face(s) to Quad\n" -c "bt_polyNSidedToQuad"; 
+    //menuItem  -label "Enable Slide Components\n" -c "bt_slideComponents;"; 
+    menuItem -divider true;
+    /*
+    if (`pluginInfo -q -l "drawSplitTool"`)
+        menuItem  -label "Draw Split Tool\n" -c "drawSplitSetup; drawSplitTool"; 
+    else
+        menuItem  -label "Draw Split Tool\n" -en 0 -c "drawSplitSetup; drawSplitTool"; 
+    if (`pluginInfo -q -l "drawReduceTool"`)
+        menuItem  -label "Draw Reduce Tool\n" -c "drawReduceSetup; drawReduceTool";   
+    else
+        menuItem  -label "Draw Reduce Tool\n" -en 0 -c "drawReduceSetup; drawReduceTool";  
+    */ 
+          
+    menuItem  -label "Delete Edge Loop Tool\n" -c "bt_polyDeleteEdgeLoopTool"; 
+    menuItem  -label "Collapse Edge Ring Tool\n" -c "bt_polyCollapseEdgeRingTool"; 
+    menuItem  -label "Spin Edge Tool\n" -c "bt_polySpinEdgeTool";   
+    }
+
+
+global proc contextPolyToolsFaceUserMM ( string $parent ) {
+    setParent -menu $parent;
+    menuItem -divider true;
+    menuItem -divider true;
+    menuItem  -label "BonusTools" -version "2016" -subMenu 1;
+    menuItem -divider true;
+    menuItem  -label "Extrude Face(s) and Preserve UVs\n" -c "bt_extrudeFaceAndPreserveUVs"; 
+    menuItem  -label "Extrude Face(s) and Scale UVs\n" -c "bt_extrudeFaceAndScaleUVs"; 
+    menuItem  -label "Flatten Faces\n" -version "2019" -c "python \"from bt_flattenComponentsSimple import *\";python \"bt_flattenComponentsSimple()\"";
+    menuItem  -label "Split Around Face(s)\n" -c "polyConvertToRingAndSplitAround"; 
+    menuItem  -label "Convert N-Sided Face(s) to Quad\n" -c "bt_polyNSidedToQuad"; 
+    //menuItem  -label "Enable Slide Components\n" -c "bt_slideComponents;"; 
+    
+    /*
+    if (`pluginInfo -q -l "drawSplitTool"`)
+        menuItem  -label "Draw Split Tool\n" -c "drawSplitSetup; drawSplitTool"; 
+    else
+        menuItem  -label "Draw Split Tool\n" -en 0 -c "drawSplitSetup; drawSplitTool"; 
+    if (`pluginInfo -q -l "drawReduceTool"`)
+        menuItem  -label "Draw Reduce Tool\n" -c "drawReduceSetup; drawReduceTool";   
+    else
+        menuItem  -label "Draw Reduce Tool\n" -en 0 -c "drawReduceSetup; drawReduceTool";   
+    */
+    }
+
+
+global proc contextPolyToolsEdgeUserMM ( string $parent ) {
+    setParent -menu $parent;
+    menuItem -divider true;
+    menuItem  -label "BonusTools" -version "2016" -subMenu 1;
+    menuItem  -label "Selecte Every N-th Edge in Loop/Ring\n" -c "selectEveryNEdge"; 
+    menuItem -divider true;
+    menuItem  -label "Connect Border Edges\n" -c "performPolyConnectBorders 0"; 
+    menuItem  -label "Slide Edge Loop and Preserver UVs\n" -c "source bt_extrudeFaceAndPreserveUVs; bt_preserveUVs; SlideEdgeTool;";
+    menuItem  -label "Flatten Edges\n" -version "2019"  -c "python \"from bt_flattenComponentsSimple import *\";python \"bt_flattenComponentsSimple()\"";
+    menuItem  -label "Split Around Edge(s)\n" -c "polyConvertToRingAndSplitAround"; 
+    menuItem  -label "Merge All Edges by Distance\n" -c "bt_mergeAllVertsEdgesByDistance"; 
+    menuItem  -label "Delete Edge and Cut UVs\n" -c "polyDeleteEdgeSaveUVs"; 
+    menuItem -divider true;
+    /*
+    if (`pluginInfo -q -l "drawSplitTool"`)
+        menuItem  -label "Draw Split Tool\n" -c "drawSplitSetup; drawSplitTool"; 
+    else
+        menuItem  -label "Draw Split Tool\n" -en 0 -c "drawSplitSetup; drawSplitTool"; 
+    if (`pluginInfo -q -l "drawReduceTool"`)
+        menuItem  -label "Draw Reduce Tool\n" -c "drawReduceSetup; drawReduceTool";   
+    else
+        menuItem  -label "Draw Reduce Tool\n" -en 0 -c "drawReduceSetup; drawReduceTool";  
+    */
+    menuItem  -label "Spin Edge Tool\n" -c "bt_polySpinEdgeTool";     
+    menuItem  -label "Delete Edge Loop Tool\n" -c "bt_polyDeleteEdgeLoopTool"; 
+    menuItem  -label "Collapse Edge Ring Tool\n" -c "bt_polyCollapseEdgeRingTool"; 
+    }  
+    
+
+global proc contextPolyToolsVertexUserMM ( string $parent ) {
+    setParent -menu $parent;
+    menuItem -divider true;
+    menuItem  -label "BonusTools" -version "2016" -subMenu 1;
+    //menuItem  -label "Slide Components" -c "bt_slideComponents;"; 
+    menuItem  -label "Flatten Vertices" -version "2019"  -c "python \"from bt_flattenComponentsSimple import *\";python \"bt_flattenComponentsSimple()\""; 
+    menuItem  -label "Split Around Vertex" -c "polyConvertToRingAndSplitAround"; 
+    menuItem  -label "Merge All Vertices by Distance\n" -c "bt_mergeAllVertsEdgesByDistance"; 
+    menuItem  -label "Adjust Vertex Normals\n" -c "bgAdjustVertexNormalsWin";    
+    /*
+    if (`pluginInfo -q -l "drawSplitTool"`)
+        menuItem  -label "Draw Split Tool\n" -c "drawSplitSetup; drawSplitTool"; 
+    else
+        menuItem  -label "Draw Split Tool\n" -en 0 -c "drawSplitSetup; drawSplitTool"; 
+    if (`pluginInfo -q -l "drawReduceTool"`)
+        menuItem  -label "Draw Reduce Tool\n" -c "drawReduceSetup; drawReduceTool";   
+    else
+        menuItem  -label "Draw Reduce Tool\n" -en 0 -c "drawReduceSetup; drawReduceTool";  
+    */
+    }
+    
+    
+global proc contextPolyToolsUVUserMM ( string $parent ) {
+    setParent -menu $parent;
+    menuItem -divider true;
+    menuItem  -label "BonusTools" -version "2016" -subMenu 1;
+    }
+    
+    
+global proc bt_loadPolyToolsMM () 
+    {
+    }
