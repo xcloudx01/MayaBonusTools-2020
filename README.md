@@ -1,7 +1,7 @@
 # Mayabonustools-2020
 ## Overview:
 
-A version of MayaBonusTools for Maya 2020. Nothing has been updated, it's just extracted for you here so you can install it easily.
+Github mirror for MayaBonusTools for Maya 2020 (May work on later versions). Nothing has been updated, it's just extracted for you here so you can install it easily.
 
 
 ## Installation
